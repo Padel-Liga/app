@@ -330,13 +330,14 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
+const APP_VERSION = "2026-11-11.3";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 
 /* Liga-Code: steht im Link (?liga=…) und wird auf dem Gerät gemerkt. Ohne Code keine Daten. */
 const LIGA = (() => {
   let c = new URLSearchParams(location.search).get("liga");
-  if(c && /^[A-Za-z0-9]{16,64}$/.test(c)){ try{ localStorage.setItem("padel-liga-code", c); }catch{} return c; }
+  if(c && /^[A-Za-z0-9]{16,64}$/.test(c)){ try{ localStorage.setItem("padel-liga-code", c); }catch{} if(location.search.includes("v=")) history.replaceState(null, "", location.pathname + "?liga=" + c + location.hash); return c; }
   try{ c = localStorage.getItem("padel-liga-code"); }catch{ c = null; }
   if(c && /^[A-Za-z0-9]{16,64}$/.test(c)){ history.replaceState(null, "", location.pathname + "?liga=" + c + location.hash); return c; }
   return null;
@@ -587,6 +588,24 @@ function tickCountdown(){
   if(lastKey !== ns.key + ns.live){ const first = lastKey===null; lastKey = ns.key + ns.live; if(!first && !S.modal) render(); }
 }
 setInterval(tickCountdown, 20000);
+
+/* ---------- Update-Prüfung: lädt neu, sobald eine neue Version online ist ---------- */
+let updatePending = false;
+async function checkUpdate(){
+  try{
+    const r = await fetch(location.pathname + "?check=" + Date.now(), {cache:"no-store"});
+    if(!r.ok) return;
+    const m = (await r.text()).match(/APP_VERSION = "([^"]+)"/);
+    if(m && m[1] !== APP_VERSION){
+      updatePending = true;
+      if(!S.modal) reloadFresh(); else toast("Neue Version verfügbar. Sie wird nach dem Schließen geladen.");
+    }
+  }catch{}
+}
+function reloadFresh(){ location.replace(location.pathname + "?liga=" + (LIGA||"") + "&v=" + Date.now() + location.hash); }
+document.addEventListener("visibilitychange", () => { if(!document.hidden) checkUpdate(); });
+setInterval(checkUpdate, 5*60*1000);
+setTimeout(checkUpdate, 3000);
 document.addEventListener("visibilitychange", () => { if(!document.hidden) tickCountdown(); });
 
 /* ---------- Abstimmung ---------- */
@@ -901,7 +920,8 @@ function viewSettings(){
   <section class="card"><h2>Liga-Link</h2>
     <p class="muted small" style="margin:0 0 10px">Jeder mit diesem Link kann alles sehen und eintragen. Teile ihn nur in eurer Gruppe.</p>
     <div class="row"><input class="input" id="shareLink" readonly value="${esc(shareLink())}" style="flex:1;min-width:0"><button class="btn sm" data-act="copy-link" id="btnCopy">Kopieren</button></div>
-    ${canWrite() && !S.matchdays.length && !S.ledger.length ? `<div style="margin-top:10px"><button class="btn sm" data-act="open-import" id="btnImport2">Daten importieren</button></div>` : ""}</section>`;
+    ${canWrite() && !S.matchdays.length && !S.ledger.length ? `<div style="margin-top:10px"><button class="btn sm" data-act="open-import" id="btnImport2">Daten importieren</button></div>` : ""}</section>
+  <p class="note" style="text-align:center">App-Version ${APP_VERSION} · <button class="btn ghost sm" data-act="reload" id="btnReload">Neu laden</button></p>`;
 }
 
 /* ---------- Bottom-Sheet ---------- */
@@ -909,7 +929,7 @@ function openModal(kind, draft){
   S.modal = kind; S.draft = draft; S.armed = null;
   $("overlay").hidden = false; renderModal(true);
 }
-function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = true; }
+function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = true; if(updatePending) reloadFresh(); }
 function renderModal(first){
   const body = $("sheetBody"); const top = body.scrollTop;
   const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer}[S.modal];
@@ -1152,6 +1172,7 @@ document.addEventListener("click", e => {
   switch(a){
     case "nav": S.view = el.dataset.view; history.replaceState(null,"","#"+S.view); render(); break;
     case "close": closeModal(); break;
+    case "reload": reloadFresh(); break;
     case "player": openModal("player", {id}); break;
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
