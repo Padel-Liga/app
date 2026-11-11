@@ -333,7 +333,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.23";
+const APP_VERSION = "2026-11-11.24";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1729,7 +1729,10 @@ document.addEventListener("click", e => {
     case "cash-more": S.cashMore = !S.cashMore; render(); break;
     case "led-filter": S.ledFilter = el.dataset.k; S.ledAll = false; render(); break;
     case "led-all": S.ledAll = !S.ledAll; render(); break;
-    case "req-cancel": guarded(async () => { await write(() => DB.doc("requests/"+S.uid).delete()); }); break;
+    case "req-cancel": guarded(async () => {
+        // Wartende Geräte haben noch keinen Datenzugriff: direkt die eigene Anfrage löschen
+        try{ await DB.doc("requests/"+S.uid).delete(); toast("Anfrage zurückgezogen"); }
+        catch(e){ toast("Zurückziehen fehlgeschlagen. Bitte nochmal versuchen."); } }); break;
     case "req-ok": { let pid = $("rq-"+id)?.value || null; const r = S.requests.find(x=>x.id===id); if(!r) break;
       guarded(async () => {
         if(pid==="__guest"){
