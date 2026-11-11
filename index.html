@@ -333,7 +333,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.22";
+const APP_VERSION = "2026-11-11.23";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1025,6 +1025,7 @@ const VAPID_KEY = "BJo_DNCvN_-7H4ftwv4CbT9WxwM1ypdG27PuJR4-hgE6OV1fI96c6I1IN0Rea
 const PUSH_TYPES = [
   ["poll","🗳️ Neue Abstimmung ist offen"],
   ["full","✅ Spiel steht (4 Zusagen)"],
+  ["unfull","⚠️ Spiel nicht mehr komplett (Absage)"],
   ["moveup","↑ Ich bin von der Warteliste nachgerückt"],
   ["reminder","⏰ Erinnerung 1 Stunde vor dem Spiel"],
   ["missing","📝 Ergebnisse fehlen noch"],

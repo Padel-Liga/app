@@ -88,8 +88,18 @@ if(ns){
   const P = pollFor(ns.key);
   // 1) Neue Abstimmung offen
   queue(`poll:${ns.key}`, "🗳️ Neue Abstimmung", `${ns.label} ${sc.start} Uhr – bist du dabei?`, forType("poll", m => players.some(p=>p.id===m.pid)));
-  // 2) Spiel steht
-  if(P.play.length >= 4) queue(`full:${ns.key}`, "✅ Spiel steht", `${ns.label} ${sc.start} Uhr: ${P.play.map(pname).join(", ")}`, forType("full"));
+  // 2) Spiel steht / nicht mehr komplett (kann mehrmals hin und her wechseln)
+  const fs = state.fullState || {}; const was = !!fs[ns.key]; const isFull = P.play.length >= 4;
+  const n = (state.fullCount||{})[ns.key] || 0;
+  if(isFull && !was){
+    queue(`full:${ns.key}:${n}`, "✅ Spiel steht", `${ns.label} ${sc.start} Uhr: ${P.play.map(pname).join(", ")}`, forType("full"));
+    fs[ns.key] = true;
+  } else if(!isFull && was){
+    const miss = 4 - P.play.length;
+    queue(`unfull:${ns.key}:${n}`, "⚠️ Spiel nicht mehr komplett", `${ns.label} ${sc.start} Uhr: Es ${miss===1?"fehlt 1 Spieler":`fehlen ${miss} Spieler`}. Kannst du einspringen?`, forType("unfull"));
+    fs[ns.key] = false; state.fullCount = {...(state.fullCount||{}), [ns.key]: n+1};
+  }
+  state.fullState = fs;
   // 3) Nachgerückt
   for(const n of votes.filter(v => v.key===ns.key && v.type==="moveup" && P.play.includes(v.in)))
     queue(`moveup:${n.id}`, "↑ Du bist nachgerückt", `Du spielst ${ns.label} um ${sc.start} Uhr (für ${pname(n.out)}).`, forType("moveup", m => m.pid===n.in));
@@ -147,5 +157,8 @@ for(const msg of outbox){
 }
 // alte Einträge (älter als 45 Tage) aufräumen
 for(const k of Object.keys(sent)) if(Date.now() - sent[k] > 45*86400000) delete sent[k];
-if(!DRY) await stateRef.set({sent, lastRun: Date.now()});
+// alte Spielstatus-Einträge aufräumen
+const keep = k => k >= new Date(Date.now()-14*86400000).toISOString().slice(0,10);
+for(const obj of [state.fullState||{}, state.fullCount||{}]) for(const k of Object.keys(obj)) if(!keep(k)) delete obj[k];
+if(!DRY) await stateRef.set({sent, fullState: state.fullState||{}, fullCount: state.fullCount||{}, lastRun: Date.now()});
 console.log(`Fertig: ${outbox.length} Nachricht(en), ${sentCount} Zustellung(en).`);
