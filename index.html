@@ -330,7 +330,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.4";
+const APP_VERSION = "2026-11-11.5";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 
@@ -466,18 +466,17 @@ function pairStats(){
 }
 function finance(){
   const f = {}; [...players(), ...guests()].forEach(p => f[p.id] = {id:p.id, owed:0, paid:0});
-  let total=0, paidTotal=0; const openMd = [];
+  let total=0, paidTotal=0; const unpaid = [];
   for(const md of [...S.matchdays].sort(byDate)){
     const cost = num(md.courtCost);
     const parts = (md.participants||[]).filter(id => f[id]);
     if(cost>0 && parts.length){
-      total += cost; const sh = cost/parts.length; const open = [];
+      total += cost; const sh = cost/parts.length;
       for(const id of parts){
         const who = f[payerOf(id)] ? payerOf(id) : id;
         f[who].owed += sh;
-        if(md.paid?.[id]){ f[who].paid += sh; if(paysCashier(id)) f[cashier()].paid -= sh; else paidTotal += sh; } else open.push(id);
+        if(md.paid?.[id]){ f[who].paid += sh; if(paysCashier(id)) f[cashier()].paid -= sh; else paidTotal += sh; } else unpaid.push({md, id, who, sh});
       }
-      if(open.length) openMd.push({md, share:sh, open});
     }
   }
   for(const e of S.ledger){
@@ -493,10 +492,20 @@ function finance(){
     }
   }
   const all = Object.values(f).map(x => ({...x, bal: r2(x.paid - x.owed)}));
+  /* Offene Anteile mit Guthaben verrechnen: Was das Konto deckt, gilt als bezahlt (älteste zuerst).
+     Offen bleiben nur die jüngsten Anteile in Höhe des Minusbetrags. */
+  const balOf = {}; all.forEach(x => balOf[x.id] = x.bal);
+  const left = {}; const covered = new Set(); const openMap = new Map();
+  for(const u of [...unpaid].reverse()){
+    left[u.who] ??= Math.max(0, -(balOf[u.who]||0));
+    if(left[u.who] > 0.004){ left[u.who] -= u.sh; if(!openMap.has(u.md)) openMap.set(u.md, {md:u.md, share:u.sh, open:[]}); openMap.get(u.md).open.push(u.id); }
+    else covered.add(u.md.id+"|"+u.id);
+  }
+  const openMd = [...openMap.values()].sort((a,b)=>byDate(a.md,b.md));
   const open = all.reduce((s,x) => s + Math.max(0, -x.bal), 0);
   const rows = all.filter(x => !isGuest(x.id));
   const guestRows = all.filter(x => isGuest(x.id) && (x.owed>0 || x.paid>0));
-  return {rows, guestRows, total:r2(total), paidTotal:r2(paidTotal), open:r2(open), openMd};
+  return {rows, guestRows, total:r2(total), paidTotal:r2(paidTotal), open:r2(open), openMd, covered};
 }
 function balPill(b){
   if(Math.abs(b) < 0.005) return `<span class="pill good">Ausgeglichen</span>`;
@@ -831,12 +840,12 @@ function dayLine(md){
 }
 function viewMatchdays(){
   const nums = mdNumbers();
-  const list = [...S.matchdays].sort(byDate).reverse();
+  const list = [...S.matchdays].sort(byDate).reverse(); const FC = finance();
   const head = `<div class="page-head"><h2>Spieltage</h2>${canWrite()?`<button class="btn primary" data-act="new-md" id="btnNewMd">${ICON.plus}Neuer Spieltag</button>`:""}</div>`;
   if(!list.length) return head + (previewCard() || `<section class="card"><div class="empty">Noch keine Spieltage eingetragen.</div></section>`);
   return head + previewCard() + list.map(md => {
     const cost = num(md.courtCost); const parts = md.participants||[];
-    const paidN = parts.filter(id => md.paid?.[id]).length;
+    const paidN = parts.filter(id => md.paid?.[id] || FC.covered.has(md.id+"|"+id)).length;
     const payPill = cost>0 && parts.length ? (paidN===parts.length ? `<span class="pill good">${eur.format(cost)} · bezahlt</span>` : `<span class="pill bad">${paidN}/${parts.length} bezahlt</span>`) : `<span class="pill neutral">ohne Kosten</span>`;
     const d = md.date ? new Date(md.date+"T12:00:00") : null;
     const wd = d && !isNaN(d) ? d.toLocaleDateString("de-DE",{weekday:"long"}) : "";
@@ -886,7 +895,7 @@ function viewCash(){
   </section>
   ${canWrite()?`<div class="actions"><button class="btn primary" data-act="new-pay" id="btnNewPay">${ICON.plus}Zahlung</button><button class="btn" data-act="new-transfer" id="btnNewTr">${ICON.swap}Umbuchung</button><button class="btn" data-act="new-cost" id="btnNewCost">${ICON.receipt}Kosten</button></div>`:""}
   <section class="card"><h2>Kontostand</h2><div class="list">${F.rows.map(accountRow).join("")}</div>
-    <p class="note">Platzkosten eines Spieltags werden gleichmäßig auf die Teilnehmer verteilt. Übernimmt ein Spieler die Kosten eines Gasts, landet dessen Anteil auf seinem Konto.</p></section>
+    <p class="note">Platzkosten eines Spieltags werden gleichmäßig auf die Teilnehmer verteilt und automatisch mit vorhandenem Guthaben verrechnet. Übernimmt ein Spieler die Kosten eines Gasts, landet dessen Anteil auf seinem Konto.</p></section>
   ${F.guestRows.length ? `<section class="card"><h2>Gäste</h2>${cashier() ? `<p class="note" style="margin:0 0 8px">Gäste zahlen ihren Anteil an ${esc(pname(cashier()))}. Das verringert ${esc(pname(cashier()))}s Guthaben um denselben Betrag.</p>` : ""}<div class="list">${F.guestRows.map(accountRow).join("")}</div></section>` : ""}
   <section class="card"><div class="card-head"><h2>Offene Spieltagsbeiträge</h2>${openMd?`<span class="small muted">Tippen = bezahlt</span>`:""}</div>${openMd ? `<div class="list">${openMd}</div>` : `<div class="muted small">Alle Spieltage sind bezahlt.</div>`}</section>
   <section class="card"><h2>Buchungen</h2>${led?`<div class="list">${led}</div>`:`<div class="muted small">Noch keine Einträge. Hier landen Einzahlungen, Umbuchungen und Kosten wie neue Bälle.</div>`}</section>`;
@@ -1035,7 +1044,7 @@ function playerOpts(sel, pool){
   return `<option value="">– wählen –</option>` + pool.map(id => `<option value="${esc(id)}" ${id===sel?"selected":""}>${esc(pname(id))}${isGuest(id)?" (Gast)":""}</option>`).join("");
 }
 function modalMd(){
-  const d = S.draft; const pool = d.participants.length ? d.participants : players().map(p=>p.id);
+  const d = S.draft; const covMd = finance().covered; const pool = d.participants.length ? d.participants : players().map(p=>p.id);
   const share = num(d.courtCost) > 0 && d.participants.length ? num(d.courtCost)/d.participants.length : 0;
   const four = d.participants.length===4;
   const matches = d.matches.map((m,i) => `<div class="medit">
@@ -1073,7 +1082,7 @@ function modalMd(){
       </div>
     </div>
     <div class="field"><span class="lbl">Bezahlt${share?` · je ${eur.format(share)}`:""}</span>
-      ${d.participants.length ? `<div class="chips">${d.participants.map(id => `<button class="chip paid" data-act="md-paid" data-id="${esc(id)}" aria-pressed="${!!d.paid[id]}">${nameHtml(id)}${d.paid[id]?" ✓":""}</button>`).join("")}</div>` : `<div class="muted small">Erst Teilnehmer wählen.</div>`}
+      ${d.participants.length ? `<div class="chips">${d.participants.map(id => `<button class="chip paid" data-act="md-paid" data-id="${esc(id)}" aria-pressed="${!!d.paid[id]}">${nameHtml(id)}${d.paid[id]?" ✓":covMd.has(d.id+"|"+id)?" · Guthaben":""}</button>`).join("")}</div>` : `<div class="muted small">Erst Teilnehmer wählen.</div>`}
     </div>
     <div class="field"><label for="f-note">Notiz</label><input class="input" id="f-note" data-f="note" value="${esc(d.note)}" placeholder="optional"></div>`,
     foot: `${d.isNew ? "<span></span>" : `<button class="btn danger ${armed?"armed":""}" data-act="md-delete" id="btnDelMd">${armed?"Wirklich löschen?":"Spieltag löschen"}</button>`}
