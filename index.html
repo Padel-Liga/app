@@ -479,7 +479,15 @@ function render(){
   let html = "";
   if(!LIGA){
     $("leagueSub").textContent = "Liga-Link fehlt";
-    $("view").innerHTML = `<section class="card"><h2>Bitte den Liga-Link öffnen</h2><p class="muted">Diese App braucht den persönlichen Link eurer Liga. Er endet auf <b>?liga=…</b>. Frag in eurer Gruppe nach dem Link und öffne ihn einmal, danach merkt sich dein Gerät die Liga.</p></section>`;
+    $("view").innerHTML = `<section class="card"><h2>Liga-Link einfügen</h2><p class="muted small">Diese App braucht einmalig den Link eurer Liga. Er endet auf <b>?liga=…</b>. Kopiere ihn aus eurer Gruppe und füge ihn hier ein. Danach merkt sich die App die Liga.</p>
+      <form class="field" id="ligaForm" style="margin-top:12px"><label for="ligaInput">Liga-Link</label><input class="input" id="ligaInput" placeholder="https://padel-liga.github.io/app/?liga=…" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn primary" type="submit" id="ligaSave">Liga öffnen</button></form></section>`;
+    $("ligaForm").addEventListener("submit", ev => {
+      ev.preventDefault();
+      const v = $("ligaInput").value.trim(); const m = v.match(/liga=([A-Za-z0-9]{16,64})/) || v.match(/^([A-Za-z0-9]{16,64})$/);
+      if(!m){ toast("Das sieht nicht nach einem Liga-Link aus."); return; }
+      try{ localStorage.setItem("padel-liga-code", m[1]); }catch{}
+      location.replace(location.pathname + "?liga=" + m[1]);
+    });
     return;
   }
   if(S.denied){
