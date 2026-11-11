@@ -356,7 +356,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.28";
+const APP_VERSION = "2026-11-11.29";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1050,20 +1050,27 @@ const calFileOk = () => sched().start==="19:30" && sched().end==="21:00";
 function modalCal(){
   const ev = calEvent(S.draft.key);
   const when = `${ev.start.toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"})} · ${sched().start}–${sched().end} Uhr`;
-  const fileBtn = (label, primary) => `<a class="btn ${primary?"primary":""}" href="${esc(calFileUrl(ev.key))}" target="_blank" rel="noopener" style="text-decoration:none;${primary?"":"color:var(--ink)"}" id="calFile">${label}</a>`;
+  const url = calFileUrl(ev.key);
+  // iPhone-Homescreen-App: Kalenderdateien hängen im App-eigenen Browser. Mit x-safari-https öffnet die Datei in der echten Safari-App,
+  // die dann „Zum Kalender hinzufügen“ anbietet (iOS 15, 17, 18).
+  const iosHref = isStandalone() ? "x-safari-" + url : url;
   const google = primary => `<a class="btn ${primary?"primary":""}" href="${esc(googleCalUrl(ev))}" target="_blank" rel="noopener" style="text-decoration:none;${primary?"":"color:var(--ink)"}" id="calGoogle">Google Kalender</a>`;
   let btns;
   if(!calFileOk()) btns = google(true);
-  else if(isIOS()) btns = fileBtn("In Apple Kalender eintragen", true) + google(false);
-  else if(isAndroid()) btns = google(true) + fileBtn("Andere Kalender-App", false);
-  else btns = fileBtn("Kalenderdatei öffnen (.ics)", true) + google(false);
+  else if(isIOS()) btns = `<a class="btn primary" href="${esc(iosHref)}" style="text-decoration:none" id="calApple">In Apple Kalender eintragen</a>`;
+  else if(isAndroid()) btns = google(true) + `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener" style="text-decoration:none;color:var(--ink)" id="calFile">Andere Kalender-App</a>`;
+  else btns = `<a class="btn primary" href="${esc(url)}" style="text-decoration:none" id="calFile">Kalenderdatei öffnen (.ics)</a>` + google(false);
   return { title:"Spieltag in Kalender eintragen", html:`
     <div class="card" style="padding:14px"><div class="pname">${esc(ev.title)}</div><div class="small muted">${esc(when)}${ev.loc?" · "+esc(ev.loc):""}</div>
       <div class="small" style="margin-top:8px;white-space:pre-line;color:var(--ink-2)">${esc(ev.desc.split("\n").filter(l=>!l.startsWith("App:")).join("\n"))}</div></div>
     <div style="display:grid;gap:8px">${btns}</div>
+    ${isIOS() && calFileOk() ? `<div class="notice small" style="display:grid;gap:6px">
+      <span><b>So geht's:</b> Safari öffnet sich mit dem Termin. Dort auf <b>„Zum Kalender hinzufügen“</b> tippen, dann zurück zur App wechseln.</span>
+      <span>Klappt das nicht: Link kopieren, in <b>Safari</b> einfügen und öffnen.</span>
+      <div class="prow"><input class="input" readonly value="${esc(url)}" id="calUrl" style="font-size:12px"><button class="btn sm" data-act="cal-copy" id="btnCalCopy">Kopieren</button></div></div>` : ""}
     <p class="note" style="margin:0">Es wird nur dieser eine Termin eingetragen, mit Erinnerung 1 Stunde vorher.
-      ${isIOS() ? "Auf dem iPhone öffnet sich eine Vorschau des Termins. Dort auf „Zum Kalender hinzufügen“ bzw. „Hinzufügen“ tippen." : isAndroid() ? "Google Kalender öffnet sich mit dem fertigen Termin, dort auf „Speichern“ tippen." : ""}
-      ${calFileOk() ? (isIOS() ? "Die Teams stehen nur in der App, im Apple-Kalender steht „Padel-Liga Spieltag“." : "") : "Weil eure Spielzeiten von 19:30–21:00 abweichen, geht es gerade nur über Google Kalender."}</p>`,
+      ${isAndroid() ? "Google Kalender öffnet sich mit dem fertigen Termin, dort auf „Speichern“ tippen." : ""}
+      ${calFileOk() ? (isIOS() ? "Im Apple-Kalender steht „Padel-Liga Spieltag“, die Teams seht ihr in der App." : "") : "Weil eure Spielzeiten von 19:30–21:00 abweichen, geht es gerade nur über Google Kalender."}</p>`,
     foot:"" };
 }
 
@@ -1810,6 +1817,7 @@ document.addEventListener("click", e => {
     case "nav": S.view = el.dataset.view; history.replaceState(null,"","#"+S.view); render(); break;
     case "close": closeModal(); break;
     case "cal": openModal("cal", {key: el.dataset.key}); break;
+    case "cal-copy": navigator.clipboard?.writeText($("calUrl")?.value||"").then(() => toast("Link kopiert, jetzt in Safari einfügen"), () => { $("calUrl")?.select(); toast("Link markiert, jetzt kopieren"); }); break;
     case "cal-ics": downloadIcs(calEvent(d.key)); toast("Kalenderdatei wird geladen"); break;
     case "push-on": if(busy) break; busy = true; enablePush().finally(() => { busy = false; }); break;
     case "push-pref": { const k = el.dataset.k; const prefs = {...(S.member?.pushPrefs||{})}; prefs[k] = prefs[k]===false; guarded(async () => { await write(() => DB.doc("members/"+S.uid).update({pushPrefs: prefs})); }); break; }
