@@ -332,7 +332,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.12";
+const APP_VERSION = "2026-11-11.13";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -957,32 +957,95 @@ function accountRow(x){
     ${canWrite() && x.bal < -0.004 ? `<div class="row" style="gap:2px;margin:2px 0 0 -11px">${canPP?`<button class="btn ghost sm" data-act="pp" data-id="${esc(x.id)}" data-amt="${-x.bal}">${PP_ICON}PayPal</button>`:""}<button class="btn ghost sm" data-act="settle" data-id="${esc(x.id)}" data-amt="${-x.bal}">Begleichen</button></div>`:""}</div></div>
     <div class="amt">${balAmt(x.bal)}</div></div>`;
 }
+/* ---------- Kasse ---------- */
+const perGame = () => { const c = num(S.config?.defaultCost); return c > 0 ? c/4 : 0; };
+const gamesLeft = bal => { const g = perGame(); return g && bal > 0.004 ? Math.floor((bal + 0.004)/g) : 0; };
+function creditLine(bal){
+  const g = perGame();
+  if(bal < -0.004) return `<span class="neg">${eur.format(-bal)} offen</span>`;
+  if(!g) return bal > 0.004 ? "Guthaben" : "ausgeglichen";
+  const n = gamesLeft(bal);
+  return n ? `reicht für <b>${n} ${n===1?"Spieltag":"Spieltage"}</b>` : (bal > 0.004 ? `reicht für keinen ganzen Spieltag` : "ausgeglichen · nächster Spieltag offen");
+}
+function gameDots(bal){
+  const g = perGame(); if(!g) return "";
+  const n = gamesLeft(bal), show = Math.min(Math.max(n,0), 10);
+  return `<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px">${Array.from({length:show},()=>`<span style="width:14px;height:14px;border-radius:4px;background:var(--good)"></span>`).join("")}${n>10?`<span class="small muted">+${n-10}</span>`:""}${n===0?`<span style="width:14px;height:14px;border-radius:4px;border:1.5px dashed var(--bad)"></span>`:""}</div>`;
+}
+function openMdFor(F, id){ return F.openMd.filter(o => o.open.some(x => x===id || payerOf(x)===id)); }
+function accountDetails(F, x){
+  const nums = mdNumbers(); const om = openMdFor(F, x.id);
+  const canPP = canWrite() && x.bal < -0.004 && ppReady() && x.id !== ppOwner();
+  return `<div style="display:grid;gap:10px;padding:4px 0 12px 47px">
+    <div class="meta num">Anteil gesamt ${eur.format(x.owed)} · bezahlt ${eur.format(x.paid)}${perGame()?` · je Spieltag ${eur.format(perGame())}`:""}</div>
+    ${om.length ? `<div class="chips">${om.map(o => o.open.filter(oid => oid===x.id || payerOf(oid)===x.id).map(oid => `<button class="chip paid" aria-pressed="false" ${canWrite()?"":"disabled"} data-act="mark-paid" data-md="${esc(o.md.id)}" data-id="${esc(oid)}" title="Als bezahlt markieren">ST ${nums[o.md.id]}${oid!==x.id?" · "+esc(pname(oid)):""} · ${eur.format(o.share)} ✓</button>`).join("")).join("")}</div><div class="muted small" style="margin-top:-4px">Tippen = Spieltag bezahlt</div>` : ""}
+    ${canWrite() && x.bal < -0.004 ? `<div class="row">${canPP?`<button class="btn primary sm" data-act="pp" data-id="${esc(x.id)}" data-amt="${-x.bal}">${PP_ICON}PayPal ${eur.format(-x.bal)}</button>`:""}<button class="btn sm" data-act="settle" data-id="${esc(x.id)}" data-amt="${-x.bal}">Begleichen</button></div>` : ""}
+  </div>`;
+}
 function viewCash(){
-  const F = finance(); const nums = mdNumbers();
-  const openMd = F.openMd.slice().reverse().map(o => `<div class="li" style="align-items:flex-start;flex-direction:column;gap:8px">
-      <div class="small"><b>Spieltag ${nums[o.md.id]}</b> <span class="muted">· ${esc(fmtDate(o.md.date))} · je ${eur.format(o.share)}</span></div>
-      <div class="chips">${o.open.map(id => `<button class="chip paid" aria-pressed="false" ${canWrite()?"":"disabled"} data-act="mark-paid" data-md="${esc(o.md.id)}" data-id="${esc(id)}" title="Als bezahlt markieren">${nameHtml(id)} ✓</button>`).join("")}</div></div>`).join("");
-  const led = [...S.ledger].sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.createdAt||0)-(a.createdAt||0)).map(e => {
+  const F = finance(); const me = getMe(); const mine = me ? [...F.rows, ...F.guestRows].find(x=>x.id===me) || {id:me, owed:0, paid:0, bal:0} : null;
+  const owner = ppOwner() || cashier(); const ownerAcc = owner ? F.rows.find(x=>x.id===owner) : null;
+  const all = [...F.rows, ...F.guestRows].sort((a,b) => a.bal-b.bal || pname(a.id).localeCompare(pname(b.id)));
+  const nOpen = all.filter(x=>x.bal<-0.004).length;
+
+  // Mein Konto
+  const myCard = mine ? (() => {
+    const neg = mine.bal < -0.004; const om = openMdFor(F, me); const nums = mdNumbers();
+    const canPP = canWrite() && neg && ppReady() && me !== ppOwner();
+    return `<section class="card" style="display:grid;gap:12px;${neg?"border-color:color-mix(in srgb,var(--bad) 40%,var(--line))":""}">
+      <div class="row between" style="align-items:flex-start;flex-wrap:nowrap"><div><div class="lbl">Mein Konto · ${nameHtml(me)}</div>
+        <div style="font-size:30px;font-weight:800;letter-spacing:-.02em;color:${neg?"var(--bad)":mine.bal>0.004?"var(--good)":"var(--ink)"}" class="num">${neg?"−":mine.bal>0.004?"+":""}${eur.format(Math.abs(mine.bal))}</div>
+        <div class="small" style="color:var(--ink-2)">${neg ? `noch offen${om.length?` · ${om.map(o=>"ST "+nums[o.md.id]).join(", ")}`:""}` : creditLine(mine.bal)}</div></div>
+        ${neg ? `<span class="pill bad">offen</span>` : `<span class="pill good">✓</span>`}</div>
+      ${!neg ? gameDots(mine.bal) : ""}
+      ${neg && canWrite() ? `<div class="row">${canPP?`<button class="btn primary" data-act="pp" data-id="${esc(me)}" data-amt="${-mine.bal}">${PP_ICON}Mit PayPal zahlen</button>`:""}<button class="btn" data-act="settle" data-id="${esc(me)}" data-amt="${-mine.bal}">Als bezahlt eintragen</button></div>` : ""}
+    </section>`; })() : "";
+
+  // Kontostand: eine Zeile pro Person, Antippen klappt Details auf
+  const rows = all.map(x => { const open = S.openAcc===x.id; const neg = x.bal < -0.004;
+    return `<div style="border-bottom:1px solid var(--line)"><div class="li click" data-act="acc" data-id="${esc(x.id)}" tabindex="0" style="cursor:pointer;border:0">
+      <div class="who">${avatar(x.id)}<div style="min-width:0"><div class="pname">${nameHtml(x.id)}${x.id===me?` <span class="pill info" style="vertical-align:1px">du</span>`:""}</div><div class="meta">${creditLine(x.bal)}</div></div></div>
+      <div class="row" style="flex-wrap:nowrap;gap:6px"><span class="amt-v" style="color:${neg?"var(--bad)":x.bal>0.004?"var(--good)":"var(--muted)"}">${neg?"−":x.bal>0.004?"+":"±"}${eur.format(Math.abs(x.bal))}</span><span style="display:inline-block;transform:rotate(${open?90:0}deg);transition:transform .15s">${ICON.chev}</span></div></div>
+      ${open ? accountDetails(F, x) : ""}</div>`; }).join("");
+
+  // Buchungen: Filter, die letzten 5, nach Monat gruppiert
+  const flt = S.ledFilter || "all";
+  const ledAll = [...S.ledger].filter(e => flt==="all" || e.type===flt).sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.createdAt||0)-(a.createdAt||0));
+  const led = S.ledAll ? ledAll : ledAll.slice(0,5);
+  let lastMonth = "";
+  const ledHtml = led.map(e => {
     const isCost = e.type==="cost", isTr = e.type==="transfer";
     const title = isCost ? `${esc(e.title||"Kosten")}` : isTr ? `${nameHtml(e.from)} → ${nameHtml(e.to)}` : `${nameHtml(e.playerId)}`;
-    const kind = isCost ? `geteilt durch ${(e.players||[]).length}` : isTr ? "Umbuchung" : "Einzahlung";
+    const kind = isCost ? `geteilt durch ${(e.players||[]).length}` : isTr ? (e.note==="PayPal" ? "PayPal" : "Umbuchung") : "Einzahlung";
     const armed = S.armed === "led:"+e.id;
-    return `<div class="li"><div class="who"><span class="tico ${isCost?"cost":isTr?"tr":"pay"}">${isCost?"−":isTr?"⇄":"+"}</span><div style="min-width:0"><div class="pname">${title}</div><div class="meta">${kind} · ${esc(fmtDate(e.date))}${e.note?" · "+esc(e.note):""}</div></div></div>
+    const mo = e.date ? new Date(e.date+"T12:00:00").toLocaleDateString("de-DE",{month:"long",year:"numeric"}) : "";
+    const head = mo !== lastMonth ? (lastMonth = mo, `<div class="lbl" style="padding:12px 0 2px">${esc(mo)}</div>`) : "";
+    return head + `<div class="li"><div class="who"><span class="tico ${isCost?"cost":isTr?"tr":"pay"}">${isCost?"−":isTr?"⇄":"+"}</span><div style="min-width:0"><div class="pname">${title}</div><div class="meta">${kind} · ${esc(fmtDate(e.date))}${e.note && e.note!=="PayPal"?" · "+esc(e.note):""}</div></div></div>
       <div class="amt"><span class="amt-v" style="color:${isTr?"var(--info)":isCost?"var(--bad)":"var(--good)"}">${isCost?"−":isTr?"":"+"}${eur.format(num(e.amount))}</span>
       ${canWrite()?`<button class="btn sm ${armed?"danger armed":"ghost"}" style="${armed?"":"color:var(--muted)"}" data-act="del-led" data-id="${esc(e.id)}">${armed?"Wirklich löschen?":"Löschen"}</button>`:""}</div></div>`;
   }).join("");
+  const fchip = (k,l) => `<button class="chip" style="padding:5px 11px;font-size:13px" data-act="led-filter" data-k="${k}" aria-pressed="${flt===k}">${l}</button>`;
+
   return `
   <section class="hero">
-    <div class="hero-top"><div><div class="k">Noch offen</div><div class="big">${eur.format(F.open)}</div><div class="meta2">${F.rows.filter(x=>x.bal<-0.004).length + F.guestRows.filter(x=>x.bal<-0.004).length} offene Konten</div></div></div>
-    <div class="stats" style="grid-template-columns:1fr 1fr"><div><b>${eur.format(F.total)}</b><span>Kosten gesamt</span></div><div><b>${eur.format(F.paidTotal)}</b><span>Eingezahlt</span></div></div>
+    <div class="hero-top"><div><div class="k">Noch offen</div><div class="big">${eur.format(F.open)}</div><div class="meta2">${nOpen ? `${nOpen} ${nOpen===1?"Konto":"Konten"} im Minus` : "Alle Konten sind gedeckt"}${perGame()?` · ${eur.format(perGame())} pro Spieltag`:""}</div></div></div>
+    <div class="stats" style="grid-template-columns:1fr 1fr">
+      ${ownerAcc && ownerAcc.bal > 0.004 ? `<div><b>${eur.format(ownerAcc.bal)}</b><span>${esc(pname(owner))} hat vorgestreckt</span></div>` : `<div><b>${eur.format(F.paidTotal)}</b><span>Eingezahlt</span></div>`}
+      <div><b>${eur.format(F.total)}</b><span>Kosten gesamt</span></div></div>
   </section>
-  ${ppReady() ? `<a class="btn" href="${esc(ppLink(0))}" target="_blank" rel="noopener" style="text-decoration:none;color:var(--ink);justify-content:flex-start;gap:10px;min-height:52px;border-radius:14px;box-shadow:var(--shadow)"><span class="tico tr" style="width:32px;height:32px">${PP_ICON}</span><span style="text-align:left"><b>PayPal an ${esc(pname(ppOwner()))}</b><br><span class="small muted" style="font-weight:500">${esc(ppLabel())}</span></span></a>` : ""}
-  ${canWrite()?`<div class="actions"><button class="btn primary" data-act="new-pay" id="btnNewPay">${ICON.plus}Zahlung</button><button class="btn" data-act="new-transfer" id="btnNewTr">${ICON.swap}Umbuchung</button><button class="btn" data-act="new-cost" id="btnNewCost">${ICON.receipt}Kosten</button></div>`:""}
-  <section class="card"><h2>Kontostand</h2><div class="list">${F.rows.map(accountRow).join("")}</div>
-    <p class="note">Platzkosten eines Spieltags werden gleichmäßig auf die Teilnehmer verteilt und automatisch mit vorhandenem Guthaben verrechnet. Übernimmt ein Spieler die Kosten eines Gasts, landet dessen Anteil auf seinem Konto.</p></section>
-  ${F.guestRows.length ? `<section class="card"><h2>Gäste</h2>${cashier() ? `<p class="note" style="margin:0 0 8px">Gäste zahlen ihren Anteil an ${esc(pname(cashier()))}. Das verringert ${esc(pname(cashier()))}s Guthaben um denselben Betrag.</p>` : ""}<div class="list">${F.guestRows.map(accountRow).join("")}</div></section>` : ""}
-  <section class="card"><div class="card-head"><h2>Offene Spieltagsbeiträge</h2>${openMd?`<span class="small muted">Tippen = bezahlt</span>`:""}</div>${openMd ? `<div class="list">${openMd}</div>` : `<div class="muted small">Alle Spieltage sind bezahlt.</div>`}</section>
-  <section class="card"><h2>Buchungen</h2>${led?`<div class="list">${led}</div>`:`<div class="muted small">Noch keine Einträge. Hier landen Einzahlungen, Umbuchungen und Kosten wie neue Bälle.</div>`}</section>`;
+  ${myCard}
+  ${canWrite() ? `<div style="display:grid;gap:8px">
+    <div class="row" style="flex-wrap:nowrap"><button class="btn primary" style="flex:1" data-act="new-pay" id="btnNewPay">${ICON.plus}Zahlung erfassen</button><button class="btn" data-act="cash-more" id="btnMore" aria-expanded="${!!S.cashMore}">Mehr ${S.cashMore?"▴":"▾"}</button></div>
+    ${S.cashMore ? `<div class="actions"><button class="btn" data-act="new-transfer" id="btnNewTr">${ICON.swap}Umbuchung</button><button class="btn" data-act="new-cost" id="btnNewCost">${ICON.receipt}Kosten</button>${ppReady()?`<a class="btn" href="${esc(ppLink(0))}" target="_blank" rel="noopener" style="text-decoration:none;color:var(--ink)">${PP_ICON}PayPal</a>`:`<span></span>`}</div>` : ""}
+  </div>` : ""}
+  <section class="card"><div class="card-head"><h2>Kontostand</h2><span class="small muted">Antippen für Details</span></div>
+    <div>${rows}</div>
+    <p class="note">Platzkosten werden gleichmäßig auf die Teilnehmer verteilt und mit Guthaben verrechnet.${cashier()?` Gäste zahlen an ${esc(pname(cashier()))}.`:""}</p></section>
+  <section class="card"><div class="card-head"><h2>Buchungen</h2><span class="small muted">${ledAll.length}</span></div>
+    <div class="chips" style="margin-bottom:4px">${fchip("all","Alle")}${fchip("payment","Zahlungen")}${fchip("transfer","Umbuchungen")}${fchip("cost","Kosten")}</div>
+    ${ledHtml ? `<div class="list">${ledHtml}</div>` : `<div class="muted small" style="padding-top:8px">Keine Einträge.</div>`}
+    ${ledAll.length > 5 ? `<div style="margin-top:8px"><button class="btn ghost sm" data-act="led-all">${S.ledAll?"Weniger anzeigen":`Alle ${ledAll.length} anzeigen`}</button></div>` : ""}
+  </section>`;
 }
 
 /* ---------- Elo-Spielstärke ----------
@@ -1500,6 +1563,10 @@ document.addEventListener("click", e => {
   switch(a){
     case "nav": S.view = el.dataset.view; history.replaceState(null,"","#"+S.view); render(); break;
     case "close": closeModal(); break;
+    case "acc": S.openAcc = S.openAcc===id ? null : id; render(); break;
+    case "cash-more": S.cashMore = !S.cashMore; render(); break;
+    case "led-filter": S.ledFilter = el.dataset.k; S.ledAll = false; render(); break;
+    case "led-all": S.ledAll = !S.ledAll; render(); break;
     case "req-cancel": guarded(async () => { await write(() => DB.doc("requests/"+S.uid).delete()); }); break;
     case "req-ok": { let pid = $("rq-"+id)?.value || null; const r = S.requests.find(x=>x.id===id); if(!r) break;
       guarded(async () => {
