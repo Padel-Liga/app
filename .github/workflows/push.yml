@@ -1,0 +1,27 @@
+name: Push-Benachrichtigungen
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # alle 5 Minuten (GitHub startet oft ein paar Minuten später)
+  workflow_dispatch: {}
+
+concurrency:
+  group: push
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Abhängigkeiten
+        run: npm install --no-save --no-audit --no-fund firebase-admin@12.7.0
+      - name: Benachrichtigungen senden
+        env:
+          FIREBASE_SA: ${{ secrets.FIREBASE_SA }}
+          LIGA_CODE: ${{ secrets.LIGA_CODE }}
+        run: node scripts/push.mjs
