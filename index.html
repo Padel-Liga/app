@@ -330,7 +330,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.5";
+const APP_VERSION = "2026-11-11.6";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 
@@ -807,6 +807,7 @@ function viewTable(){
       <tbody>${rows}</tbody></table></div>
     <p class="note">Jeder wird einzeln gewertet, egal mit wem er zusammen gespielt hat. Sortiert wird nach Siegquote, bei Gleichstand nach Spieldifferenz pro Match. In die Wertung kommt, wer bei mindestens ${minPct()} % der Spieltage dabei war (aktuell ${need}).</p>
   </section>
+  ${eloCard()}
   ${guestTable()}
   <section class="card"><div class="card-head"><h2>Beste Paarungen</h2><span class="small muted">nur Liga-Spieler</span></div>
     <div class="tablewrap"><table><thead><tr><th class="l">Team</th><th>Sp</th><th>Siege</th><th>Quote</th></tr></thead><tbody>${pairRows || `<tr><td class="l muted" colspan="4">Noch keine Paarungen.</td></tr>`}</tbody></table></div>
@@ -901,6 +902,100 @@ function viewCash(){
   <section class="card"><h2>Buchungen</h2>${led?`<div class="list">${led}</div>`:`<div class="muted small">Noch keine Einträge. Hier landen Einzahlungen, Umbuchungen und Kosten wie neue Bälle.</div>`}</section>`;
 }
 
+/* ---------- Elo-Spielstärke ----------
+   Start 1000. Teamstärke = Mittel der beiden Spieler. Erwartung nach Elo-Formel,
+   K = 32, deutliche Ergebnisse zählen bis zu 50 % mehr. Beide Spieler eines Teams bekommen dieselbe Änderung. */
+const ELO_START = 1000;
+function elo(){
+  const R = {}, peak = {}, hist = {};
+  const get = id => (R[id] ??= ELO_START);
+  for(const md of [...S.matchdays].sort(byDate)){
+    let any = false;
+    for(const m of (md.matches||[])){
+      const r = result(m); if(!r.played) continue;
+      const a = (m.a||[]).filter(Boolean), b = (m.b||[]).filter(Boolean); if(a.length!==2 || b.length!==2) continue;
+      const ra = (get(a[0])+get(a[1]))/2, rb = (get(b[0])+get(b[1]))/2;
+      const E = 1/(1+Math.pow(10,(rb-ra)/400)); const Sa = r.w==="a" ? 1 : r.w==="b" ? 0 : .5;
+      const k = 32*(1 + Math.min(Math.abs(r.ga-r.gb),6)/12); const d = k*(Sa-E);
+      a.forEach(id => R[id] += d); b.forEach(id => R[id] -= d);
+      [...a,...b].forEach(id => peak[id] = Math.max(peak[id] ?? ELO_START, R[id]));
+      any = true;
+    }
+    if(any) (md.participants||[]).forEach(id => { if(R[id]!=null) (hist[id] ||= []).push({md, r:R[id]}); });
+  }
+  const rating = id => Math.round(R[id] ?? ELO_START);
+  const trend = id => { const h = hist[id]||[]; if(!h.length) return 0; const last = h[h.length-1]; const prev = h.length>1 ? h[h.length-2].r : ELO_START; return Math.round(last.r - prev); };
+  return {R, rating, trend, peak: id => Math.round(peak[id] ?? ELO_START), hist};
+}
+function eloCard(){
+  const E = elo(); const ps = players().filter(p => E.R[p.id]!=null);
+  if(!ps.length) return "";
+  const rows = ps.map(p => ({id:p.id, r:E.rating(p.id), t:E.trend(p.id)})).sort((a,b)=>b.r-a.r);
+  const lo = Math.min(...rows.map(x=>x.r)), hi = Math.max(...rows.map(x=>x.r)); const span = Math.max(hi-lo, 1);
+  return `<section class="card">
+    <div class="card-head"><h2>Spielstärke (Elo)</h2><button class="btn ghost sm" data-act="compare" id="btnCompare">Direktvergleich</button></div>
+    <div class="list">${rows.map((x,i) => `<div class="li click" data-act="player" data-id="${esc(x.id)}" tabindex="0" style="cursor:pointer">
+      <div class="who" style="flex:1"><span class="rank" style="${i===0?"background:var(--ball);color:var(--ball-ink)":""}">${i+1}</span><div style="flex:1;min-width:0"><div class="pname">${esc(pname(x.id))}</div>
+        <div style="height:6px;border-radius:3px;background:var(--surface-2);margin-top:6px;overflow:hidden"><div style="height:100%;width:${Math.round(20+80*(x.r-lo)/span)}%;background:var(--primary);border-radius:3px"></div></div></div></div>
+      <div class="amt"><span class="amt-v">${x.r}</span><span class="small ${x.t>0?"pos":x.t<0?"neg":"muted"}" style="font-weight:600">${x.t>0?"▲ +"+x.t:x.t<0?"▼ "+x.t:"±0"}</span></div></div>`).join("")}</div>
+    <p class="note">Alle starten bei ${ELO_START}. Ein Sieg gegen ein stärkeres Team bringt mehr Punkte als gegen ein schwächeres, deutliche Ergebnisse zählen etwas mehr. Der Pfeil zeigt die Änderung am letzten Spieltag.</p>
+  </section>`;
+}
+
+/* ---------- Direktvergleich ---------- */
+function compareStats(a, b){
+  const vs = {sp:0, a:0, b:0, d:0, ga:0, gb:0, list:[]}, tog = {sp:0, s:0, gd:0};
+  for(const md of [...S.matchdays].sort(byDate)) (md.matches||[]).forEach((m,i) => {
+    const r = result(m); if(!r.played) return;
+    const sa = (m.a||[]).includes(a) ? "a" : (m.b||[]).includes(a) ? "b" : null;
+    const sb = (m.a||[]).includes(b) ? "a" : (m.b||[]).includes(b) ? "b" : null;
+    if(!sa || !sb) return;
+    const g = s => s==="a" ? [r.ga, r.gb] : [r.gb, r.ga];
+    if(sa===sb){ tog.sp++; if(r.w===sa) tog.s++; else if(r.w==="d") tog.s += .5; tog.gd += g(sa)[0]-g(sa)[1]; }
+    else { vs.sp++; if(r.w===sa) vs.a++; else if(r.w===sb) vs.b++; else vs.d++; vs.ga += g(sa)[0]; vs.gb += g(sa)[1]; vs.list.push({md, m, i, sa, r}); }
+  });
+  return {vs, tog};
+}
+function modalCompare(){
+  const d = S.draft; const pool = [...players(), ...guests()].map(p=>p.id);
+  const sel = (k,lbl) => `<div class="field"><label for="cmp-${k}">${lbl}</label><select class="input" id="cmp-${k}" data-f="${k}" data-rerender="1">${playerOpts(d[k], pool)}</select></div>`;
+  let body = "";
+  if(d.a && d.b && d.a!==d.b){
+    const C = compareStats(d.a, d.b); const E = elo();
+    const st = [...standings(), ...standings(guests())]; const A = st.find(x=>x.id===d.a), B = st.find(x=>x.id===d.b);
+    const PA = playerStats(d.a), PB = playerStats(d.b);
+    const v = C.vs; const tot = Math.max(v.a+v.b+v.d, 1);
+    const metric = (lbl, x, y, fmt = z=>z, higher = true) => { const better = x===y ? 0 : (x>y) === higher ? 1 : -1;
+      return `<tr><td class="${better>0?"pos":""}" style="text-align:left;font-weight:${better>0?700:500}">${fmt(x)}</td><td style="text-align:center" class="muted small">${lbl}</td><td class="${better<0?"pos":""}" style="font-weight:${better<0?700:500}">${fmt(y)}</td></tr>`; };
+    const nums = mdNumbers();
+    body = `
+    <div class="row" style="justify-content:space-between;flex-wrap:nowrap">
+      <div style="display:grid;justify-items:center;gap:6px;flex:1;text-align:center">${avatar(d.a,true)}<b>${nameHtml(d.a)}</b></div>
+      <div style="text-align:center"><div style="font-size:30px;font-weight:800;letter-spacing:-.02em" class="num">${v.a} : ${v.b}</div><div class="small muted">Siege gegeneinander</div></div>
+      <div style="display:grid;justify-items:center;gap:6px;flex:1;text-align:center">${avatar(d.b,true)}<b>${nameHtml(d.b)}</b></div>
+    </div>
+    ${v.sp ? `<div style="display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--surface-2)"><div style="width:${v.a/tot*100}%;background:var(--primary)"></div><div style="width:${v.d/tot*100}%;background:var(--muted)"></div><div style="width:${v.b/tot*100}%;background:var(--ball)"></div></div>
+      <div class="small muted" style="text-align:center">${v.sp} ${v.sp===1?"Match":"Matches"} gegeneinander${v.d?` · ${v.d} Remis`:""} · Spiele ${v.ga}:${v.gb}</div>`
+      : `<div class="notice small">Die beiden haben noch nie gegeneinander gespielt.</div>`}
+    <div class="sect"><h3>Zusammen als Team</h3><div class="card" style="padding:12px 14px">${C.tog.sp ? `<div class="row between"><span><b>${C.tog.sp}</b> ${C.tog.sp===1?"Match":"Matches"} · <b>${C.tog.s % 1 ? C.tog.s.toLocaleString("de-DE") : C.tog.s}</b> Siege · Spiele ${C.tog.gd>0?"+":""}${C.tog.gd}</span><span class="pill ${C.tog.s/C.tog.sp>=.5?"good":"bad"}">${Math.round(C.tog.s/C.tog.sp*100)} %</span></div>` : `<span class="muted small">Noch nie zusammen gespielt.</span>`}</div></div>
+    <div class="sect"><h3>Im Vergleich</h3><div class="card" style="padding:6px 14px"><table><tbody>
+      ${metric("Elo", E.rating(d.a), E.rating(d.b))}
+      ${metric("Siegquote", A?.quote||0, B?.quote||0, pct)}
+      ${metric("Spiele ± / Match", A?.gdpm||0, B?.gdpm||0, sgn)}
+      ${metric("Matches", A?.sp||0, B?.sp||0)}
+      ${metric("Tagessiege", A?.dayWins||0, B?.dayWins||0)}
+      ${metric("Längste Siegserie", PA.best, PB.best)}
+      ${metric("Knappe Sätze gewonnen", PA.close ? PA.closeW/PA.close : 0, PB.close ? PB.closeW/PB.close : 0, z => Math.round(z*100)+" %")}
+    </tbody></table></div></div>
+    ${v.list.length ? `<div class="sect"><h3>Direkte Duelle</h3><div class="card" style="padding:12px 14px"><div class="list">${v.list.slice(-6).reverse().map(x => {
+      const mine = x.sa==="a" ? x.m.a : x.m.b, theirs = x.sa==="a" ? x.m.b : x.m.a; const won = x.r.w===x.sa ? "S" : x.r.w==="d" ? "U" : "N";
+      const sets = (x.m.sets||[]).filter(s=>s?.a!=null&&s?.b!=null).map(s => x.sa==="a" ? `${s.a}:${s.b}` : `${s.b}:${s.a}`).join(" ");
+      return `<div class="li"><div class="who"><span class="wl ${won}">${won}</span><div style="min-width:0"><div class="small"><b>${mine.map(nameHtml).join(" & ")}</b> gegen ${theirs.map(nameHtml).join(" & ")}</div><div class="meta">Spieltag ${nums[x.md.id]} · ${esc(fmtDate(x.md.date))}</div></div></div><span class="amt-v">${sets}</span></div>`; }).join("")}</div>
+      <p class="note" style="margin:8px 0 0">S/N aus Sicht von ${esc(pname(d.a))}.</p></div></div>` : ""}`;
+  } else body = `<div class="muted small">Wähle zwei verschiedene Spieler.</div>`;
+  return { title:"Direktvergleich", html:`<div class="grid2">${sel("a","Spieler 1")}${sel("b","Spieler 2")}</div>${body}`, foot:"" };
+}
+
 /* ---------- Spielerprofil ---------- */
 function playerStats(id){
   const list = [];
@@ -988,6 +1083,7 @@ function modalPlayer(){
     </div>
     <div class="sect"><h3>Verlauf der Siegquote</h3><div class="card" style="padding:12px 10px 6px">${chartSvg(P.timeline)}</div></div>
     <div class="sect"><h3>Fakten</h3><div class="facts">
+      ${(() => { const E = elo(); return fact("Elo-Spielstärke", `${E.rating(id)} · Bestwert ${E.peak(id)}`); })()}
       ${fact("Aktuelle Serie", streakTxt)}
       ${fact("Längste Siegserie", P.best ? P.best+" in Folge" : "–")}
       ${fact("Knappe Sätze gewonnen", P.close ? `${P.closeW} von ${P.close}` : "–")}
@@ -1000,7 +1096,8 @@ function modalPlayer(){
     <div class="sect"><h3>Mit Partner</h3><div class="card" style="padding:12px 14px">${relTable(P.partners,"Partner")}</div></div>
     <div class="sect"><h3>Gegen Gegner</h3><div class="card" style="padding:12px 14px">${relTable(P.opps,"Gegner")}</div></div>
     <div class="sect"><h3>Letzte Matches</h3><div class="card" style="padding:12px 14px"><div class="list">${last}</div></div></div>` : `<div class="empty">Noch keine Matches gespielt.</div>`}
-    ${acc ? `<div class="sect"><h3>Kasse</h3><div class="card" style="padding:12px 14px"><div class="li" style="padding:0"><div class="meta num">Anteil ${eur.format(acc.owed)} · bezahlt ${eur.format(acc.paid)}</div><div class="amt">${balAmt(acc.bal)}</div></div></div></div>` : ""}`,
+    ${acc ? `<div class="sect"><h3>Kasse</h3><div class="card" style="padding:12px 14px"><div class="li" style="padding:0"><div class="meta num">Anteil ${eur.format(acc.owed)} · bezahlt ${eur.format(acc.paid)}</div><div class="amt">${balAmt(acc.bal)}</div></div></div></div>` : ""}
+    <button class="btn" data-act="compare" data-id="${esc(id)}" id="btnCmpFrom">Mit anderem Spieler vergleichen</button>`,
     foot: "" };
 }
 
@@ -1034,7 +1131,7 @@ function openModal(kind, draft){
 function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = true; if(updatePending) reloadFresh(); }
 function renderModal(first){
   const body = $("sheetBody"); const top = body.scrollTop;
-  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest}[S.modal];
+  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare}[S.modal];
   if(!fn) return;
   const {title, html, foot} = fn();
   $("sheetTitle").textContent = title; body.innerHTML = html; $("sheetFoot").innerHTML = foot;
@@ -1276,6 +1373,10 @@ document.addEventListener("click", e => {
     case "close": closeModal(); break;
     case "reload": reloadFresh(); break;
     case "player": openModal("player", {id}); break;
+    case "compare": {
+      const me = getMe(); const ids = players().map(p=>p.id);
+      const a = id || me || ids[0] || ""; const b = ids.find(x => x!==a) || "";
+      openModal("cmp", {a, b}); break; }
     case "poll-guest": { const ns = nextSession(); if(!ns) break; openModal("pguest", {key:ns.key, label:fmtSession(ns), name:"", host:"", pick:null}); break; }
     case "pg-pick": d.pick = d.pick===id ? null : id; renderModal(); break;
     case "pg-save": guarded(savePollGuest); break;
@@ -1391,7 +1492,7 @@ function updateShareLabels(){
 $("overlay").addEventListener("click", e => { if(e.target.id==="overlay") closeModal(); });
 document.addEventListener("keydown", e => {
   if(e.key==="Escape" && S.modal) closeModal();
-  if((e.key==="Enter" || e.key===" ") && e.target.matches?.("tr[data-act]")){ e.preventDefault(); e.target.click(); }
+  if((e.key==="Enter" || e.key===" ") && e.target.matches?.("tr[data-act], .li[data-act]")){ e.preventDefault(); e.target.click(); }
 });
 let toastT;
 function toast(msg){ const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(()=>t.hidden=true, 2800); }
