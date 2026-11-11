@@ -136,6 +136,7 @@ for(const m of tests) outbox.push({key:null, title:"🔔 Test", body:"Push-Benac
 let sentCount = 0;
 for(const msg of outbox){
   const tokens = [...new Set(msg.to.map(m => m.pushToken))];
+  console.log("Sende:", msg.key || "test", "|", msg.title, "→", msg.to.map(m=>m.name||m.pid).join(", "));
   if(DRY){ console.log("[DRY]", msg.key, msg.title, "|", msg.body, "→", msg.to.map(m=>m.name||m.pid).join(", ")); }
   else {
     const res = await admin.messaging().sendEachForMulticast({
