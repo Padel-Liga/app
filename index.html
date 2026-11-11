@@ -332,7 +332,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.14";
+const APP_VERSION = "2026-11-11.15";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -778,6 +778,7 @@ function previewCard(){
     <div class="md-head">
       <div class="datebox" style="background:var(--surface-2);color:var(--muted)"><b>${ns.start.getDate()}</b><span>${ns.start.toLocaleDateString("de-DE",{month:"short"}).replace(".","")}</span></div>
       <div class="md-title"><div class="md-no">Spieltag ${n} <span class="pill neutral" style="vertical-align:2px">Vorschau</span></div><div class="md-sub">${WD[ns.start.getDay()]}, ${sched().start}–${sched().end} Uhr · ${countdownText(ns)}</div></div>
+      <button class="iconbtn" data-act="cal" data-key="${ns.key}" aria-label="In Kalender eintragen" title="In Kalender eintragen">${ICON.cal}</button>
     </div>
     ${full ? `<div class="row">${P.play.map(id=>`<span class="dr"><b>${esc(pname(id))}</b>${isGuest(id)?`<span class="gtag">Gast</span>`:""}</span>`).join("")}${cost?`<span class="pill neutral">je ${eur.format(cost/4)}</span>`:""}</div>
       <div class="rounds">${rounds.map((m,i)=>matchLine(m,i)).join("")}</div>
@@ -828,6 +829,7 @@ const initials = n => (n||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join(
 const avatar = (id, lg) => `<span class="avatar${lg?" lg":""}" style="background:${avColor(id)}" aria-hidden="true">${esc(initials(pname(id)))}</span>`;
 const formHtml = f => `<span class="form">${f.slice(-5).map(x=>`<span class="fd ${x}" title="${x==="S"?"Sieg":x==="N"?"Niederlage":"Unentschieden"}">${x}</span>`).join("")}</span>`;
 const ICON = {
+  cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/></svg>',
   edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   swap:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h12l-3-3M17 17H5l3 3"/></svg>',
@@ -926,6 +928,7 @@ function viewMatchdays(){
       <div class="md-head">
         <div class="datebox"><b>${d&&!isNaN(d)?d.getDate():"–"}</b><span>${d&&!isNaN(d)?d.toLocaleDateString("de-DE",{month:"short"}).replace(".",""):""}</span></div>
         <div class="md-title"><div class="md-no">Spieltag ${nums[md.id]}</div><div class="md-sub">${esc(wd)}${md.location?" · "+esc(md.location):""}</div></div>
+        ${md.date && md.date >= today() ? `<button class="iconbtn" data-act="cal" data-key="${esc(md.date)}" aria-label="In Kalender eintragen" title="In Kalender eintragen">${ICON.cal}</button>` : ""}
         ${canWrite()?`<button class="iconbtn" data-act="edit-md" data-id="${esc(md.id)}" aria-label="Spieltag ${nums[md.id]} bearbeiten" title="Bearbeiten">${ICON.edit}</button>`:""}
       </div>
       <div class="row">${winners.length?`<span class="pill ball">Tagessieg: ${winners.map(id=>esc(pname(id))).join(" & ")}</span>`:""}${payPill}</div>
@@ -957,6 +960,53 @@ function accountRow(x){
     ${canWrite() && x.bal < -0.004 ? `<div class="row" style="gap:2px;margin:2px 0 0 -11px">${canPP?`<button class="btn ghost sm" data-act="pp" data-id="${esc(x.id)}" data-amt="${-x.bal}">${PP_ICON}PayPal</button>`:""}<button class="btn ghost sm" data-act="settle" data-id="${esc(x.id)}" data-amt="${-x.bal}">Begleichen</button></div>`:""}</div></div>
     <div class="amt">${balAmt(x.bal)}</div></div>`;
 }
+/* ---------- Kalender (Apple, Google, .ics) ---------- */
+const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints > 1);
+const isAndroid = () => /Android/.test(navigator.userAgent);
+const icsDate = d => d.toISOString().replace(/[-:]/g,"").replace(/\.\d{3}/,"");
+const icsEsc = t => String(t||"").replace(/\\/g,"\\\\").replace(/;/g,"\;").replace(/,/g,"\\,").replace(/\r?\n/g,"\\n");
+function calEvent(key){
+  // Termin aus Datum + Spielzeiten; Inhalt aus vorhandenem Spieltag oder der Abstimmung
+  const day = new Date(key+"T12:00:00"); const start = atTime(day, sched().start), end = atTime(day, sched().end); if(end <= start) end.setDate(end.getDate()+1);
+  const md = mdForDate(key); const nums = mdNumbers(); const n = md ? nums[md.id] : Object.keys(nums).length + 1;
+  const play = md ? (md.participants||[]) : pollFor(key).play;
+  const rounds = md ? (md.matches||[]) : (play.length>=4 ? plannedRounds(play.slice(0,4), key) : []);
+  const loc = (md?.location || S.config?.defaultLocation || "").trim();
+  const lines = [];
+  if(play.length) lines.push("Spieler: " + play.map(pname).join(", "));
+  rounds.forEach((m,i) => lines.push(`${m.extra?"Extra":"Runde "+(i+1)}: ${(m.a||[]).map(pname).join(" & ")} gegen ${(m.b||[]).map(pname).join(" & ")}`));
+  lines.push("App: " + shareLink());
+  return {key, title:`Padel · Spieltag ${n}`, start, end, loc, desc: lines.join("\n")};
+}
+function icsText(ev){
+  return ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//Padel-Liga//DE","CALSCALE:GREGORIAN","METHOD:PUBLISH","BEGIN:VEVENT",
+    `UID:padel-${ev.key}@padel-liga.github.io`, `DTSTAMP:${icsDate(new Date())}`, `DTSTART:${icsDate(ev.start)}`, `DTEND:${icsDate(ev.end)}`,
+    `SUMMARY:${icsEsc(ev.title)}`, ev.loc ? `LOCATION:${icsEsc(ev.loc)}` : null, `DESCRIPTION:${icsEsc(ev.desc)}`,
+    "BEGIN:VALARM","TRIGGER:-PT1H","ACTION:DISPLAY",`DESCRIPTION:${icsEsc(ev.title)}`,"END:VALARM","END:VEVENT","END:VCALENDAR"].filter(Boolean).join("\r\n");
+}
+const icsDataUrl = ev => "data:text/calendar;charset=utf-8," + encodeURIComponent(icsText(ev));
+const googleCalUrl = ev => "https://calendar.google.com/calendar/render?action=TEMPLATE"
+  + "&text=" + encodeURIComponent(ev.title) + "&dates=" + icsDate(ev.start) + "/" + icsDate(ev.end)
+  + "&details=" + encodeURIComponent(ev.desc) + (ev.loc ? "&location=" + encodeURIComponent(ev.loc) : "") + "&ctz=Europe/Berlin";
+function downloadIcs(ev){
+  const blob = new Blob([icsText(ev)], {type:"text/calendar;charset=utf-8"}); const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href = url; a.download = `padel-${ev.key}.ics`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+function modalCal(){
+  const ev = calEvent(S.draft.key);
+  const when = `${ev.start.toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"})} · ${sched().start}–${sched().end} Uhr`;
+  const apple = `<a class="btn ${isIOS()?"primary":""}" href="${esc(icsDataUrl(ev))}" target="_blank" rel="noopener" style="text-decoration:none;${isIOS()?"":"color:var(--ink)"}" id="calApple">iPhone / Apple Kalender</a>`;
+  const google = `<a class="btn ${isAndroid()?"primary":""}" href="${esc(googleCalUrl(ev))}" target="_blank" rel="noopener" style="text-decoration:none;${isAndroid()?"":"color:var(--ink)"}" id="calGoogle">Google Kalender</a>`;
+  const file = `<button class="btn" data-act="cal-ics" id="calIcs">Andere Kalender-App (.ics-Datei)</button>`;
+  return { title:"In Kalender eintragen", html:`
+    <div class="card" style="padding:14px"><div class="pname">${esc(ev.title)}</div><div class="small muted">${esc(when)}${ev.loc?" · "+esc(ev.loc):""}</div>
+      <div class="small" style="margin-top:8px;white-space:pre-line;color:var(--ink-2)">${esc(ev.desc.split("\n").filter(l=>!l.startsWith("App:")).join("\n"))}</div></div>
+    <div style="display:grid;gap:8px">${isAndroid() ? google + apple : apple + google}${file}</div>
+    <p class="note" style="margin:0">Mit Erinnerung 1 Stunde vorher. ${isIOS() ? "Auf dem iPhone öffnet sich eine Vorschau, dort auf „Hinzufügen“ tippen." : isAndroid() ? "Auf Android öffnet sich Google Kalender, dort auf „Speichern“ tippen." : ""} Ändern sich danach die Teams, wird der Kalendereintrag nicht automatisch angepasst.</p>`,
+    foot:"" };
+}
+
 /* ---------- Kasse ---------- */
 const LOCK_MS = 24*60*60*1000;
 const ledEditable = e => !!e.createdAt && Date.now() - e.createdAt < LOCK_MS;
@@ -1309,7 +1359,7 @@ function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = tru
 function renderModal(first){
   S._elo = null;
   const body = $("sheetBody"); const top = body.scrollTop;
-  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP}[S.modal];
+  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal}[S.modal];
   if(!fn) return;
   const {title, html, foot} = fn();
   $("sheetTitle").textContent = title; body.innerHTML = html; $("sheetFoot").innerHTML = foot;
@@ -1566,6 +1616,8 @@ document.addEventListener("click", e => {
   switch(a){
     case "nav": S.view = el.dataset.view; history.replaceState(null,"","#"+S.view); render(); break;
     case "close": closeModal(); break;
+    case "cal": openModal("cal", {key: el.dataset.key}); break;
+    case "cal-ics": downloadIcs(calEvent(d.key)); toast("Kalenderdatei wird geladen"); break;
     case "acc": S.openAcc = S.openAcc===id ? null : id; render(); break;
     case "cash-more": S.cashMore = !S.cashMore; render(); break;
     case "led-filter": S.ledFilter = el.dataset.k; S.ledAll = false; render(); break;
