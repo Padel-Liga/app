@@ -321,6 +321,7 @@ textarea.input{min-height:160px;font-family:ui-monospace,monospace;font-size:13p
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc as fdoc, collection as fcol, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot as fsnap, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -331,9 +332,10 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.8";
+const APP_VERSION = "2026-11-11.9";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
+const auth = getAuth(fbApp);
 
 /* Liga-Code: steht im Link (?liga=…) und wird auf dem Gerät gemerkt. Ohne Code keine Daten. */
 const LIGA = (() => {
@@ -538,8 +540,14 @@ function render(){
     });
     return;
   }
+  document.querySelector(".tabs").style.display = S.member ? "" : "none";
+  if(!S.member){
+    $("leagueSub").textContent = "Gerät nicht freigegeben";
+    $("view").innerHTML = joinScreen(); bindJoin();
+    return;
+  }
   if(S.denied){
-    $("view").innerHTML = `<section class="card"><h2>Kein Zugriff</h2><p class="muted">Die Datenbank hat den Zugriff abgelehnt. Prüfe, ob der Liga-Link vollständig ist.</p></section>`;
+    $("view").innerHTML = `<section class="card"><h2>Kein Zugriff</h2><p class="muted">Die Datenbank hat den Zugriff abgelehnt. Wurde dieses Gerät entfernt? Lade die App neu, um eine neue Freigabe anzufragen.</p><button class="btn" data-act="reload">Neu laden</button></section>`;
     return;
   }
   if(S.noDb) html += `<div class="notice bad">Die Datenbank ist in dieser Ansicht nicht erreichbar. Bitte Seite neu laden.</div>`;
@@ -552,6 +560,7 @@ function render(){
       <p class="muted">Lege zuerst Liganame und eure Spieler an. Danach könnt ihr Spieltage mit Ergebnissen eintragen und festhalten, wer seinen Platzanteil bezahlt hat.</p>
       ${canWrite() ? `<div class="row"><button class="btn primary" data-act="open-settings" id="btnSetup">Liga einrichten</button><button class="btn" data-act="open-import" id="btnImport">Daten aus alter App importieren</button></div>` : ""}</section>`;
   } else if(cfg){
+    html += requestsCard();
     if(S.view==="tabelle" || S.view==="spieltage") html += missingCard();
     if(S.view==="tabelle") html += pollCard();
     html += ({tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
@@ -1192,8 +1201,9 @@ function viewSettings(){
   <section class="card"><h2>Spieler</h2><div class="list">${rows}</div></section>
   ${guests().length ? `<section class="card"><h2>Gäste</h2><div class="list">${(() => { const gs = standings(guests()); return guests().map(g => { const x = gs.find(s=>s.id===g.id); return `<div class="li"><div class="pname">${esc(g.name)}</div><div class="meta">${x?.days||0} Spieltage · ${x?.sp||0} Matches</div></div>`; }).join(""); })()}</div>
     <p class="muted small" style="margin:8px 0 0">Gäste legst du beim Spieltag an. Umbenennen geht über „Bearbeiten“.</p></section>` : ""}
+  ${devicesCard()}
   <section class="card"><h2>Liga-Link</h2>
-    <p class="muted small" style="margin:0 0 10px">Jeder mit diesem Link kann alles sehen und eintragen. Teile ihn nur in eurer Gruppe.</p>
+    <p class="muted small" style="margin:0 0 10px">Neue Mitspieler öffnen diesen Link und fragen eine Freigabe an. Ohne Freigabe sieht niemand eure Daten.</p>
     <div class="row"><input class="input" id="shareLink" readonly value="${esc(shareLink())}" style="flex:1;min-width:0"><button class="btn sm" data-act="copy-link" id="btnCopy">Kopieren</button></div>
     ${canWrite() && !S.matchdays.length && !S.ledger.length ? `<div style="margin-top:10px"><button class="btn sm" data-act="open-import" id="btnImport2">Daten importieren</button></div>` : ""}</section>
   <p class="note" style="text-align:center">App-Version ${APP_VERSION} · <button class="btn ghost sm" data-act="reload" id="btnReload">Neu laden</button></p>`;
@@ -1461,10 +1471,19 @@ async function saveCost(){
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if(!el || el.disabled) return;
   const a = el.dataset.act, id = el.dataset.id, d = S.draft;
-  if(a!=="del-led" && a!=="md-delete") S.armed = null;
+  if(a!=="del-led" && a!=="md-delete" && a!=="mem-del") S.armed = null;
   switch(a){
     case "nav": S.view = el.dataset.view; history.replaceState(null,"","#"+S.view); render(); break;
     case "close": closeModal(); break;
+    case "req-cancel": guarded(async () => { await write(() => DB.doc("requests/"+S.uid).delete()); }); break;
+    case "req-ok": { const pid = $("rq-"+id)?.value || null; const r = S.requests.find(x=>x.id===id); if(!r) break;
+      guarded(async () => { const ok = await write(() => DB.doc("members/"+id).set({name:r.name, pid, device:r.device||"", at:Date.now(), by:S.member?.pid ? pname(S.member.pid) : (S.member?.name||"")}));
+        if(ok){ await write(() => DB.doc("requests/"+id).delete()); toast(r.name+" ist freigegeben"); } }); break; }
+    case "req-no": guarded(async () => { const ok = await write(() => DB.doc("requests/"+id).delete()); if(ok) toast("Anfrage abgelehnt"); }); break;
+    case "mem-del":
+      if(S.armed!=="mem:"+id){ S.armed = "mem:"+id; render(); break; }
+      S.armed = null;
+      guarded(async () => { const ok = await write(() => DB.doc("members/"+id).delete()); if(ok) toast(id===S.uid ? "Gerät abgemeldet" : "Gerät entfernt"); }); break;
     case "reload": reloadFresh(); break;
     case "player": openModal("player", {id}); break;
     case "compare": {
@@ -1610,6 +1629,75 @@ window.addEventListener("hashchange", route);
 
 /* ---------- Start ---------- */
 route();
+/* ---------- Gerätefreigabe ----------
+   Jedes Gerät meldet sich still (anonym) bei Firebase an und bekommt eine feste Kennung.
+   Daten lesen und schreiben dürfen nur freigegebene Kennungen (members). Neue Geräte stellen
+   eine Anfrage (requests), ein Mitglied gibt sie frei. Das erste Gerät nutzt den Wiederherstellungscode. */
+S.uid = null; S.member = null; S.memberChecked = false; S.myReq = null; S.members = []; S.requests = []; S.authErr = null;
+let accessUnsubs = [];
+const deviceLabel = () => { const u = navigator.userAgent; const t = /iPhone/.test(u) ? "iPhone" : /iPad/.test(u) ? "iPad" : /Android/.test(u) ? "Android" : /Mac/.test(u) ? "Mac" : /Windows/.test(u) ? "Windows-PC" : "Gerät";
+  const app = (window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone) ? " · Homescreen-App" : " · Browser"; return t + app; };
+function watchAccess(uid){
+  accessUnsubs.forEach(f => f()); accessUnsubs = [];
+  S.memberChecked = false;
+  accessUnsubs.push(DB.doc("members/"+uid).onSnapshot(s => {
+    const was = !!S.member; S.member = s.exists ? s.data() : null; S.memberChecked = true;
+    if(S.member){
+      if(S.member.recovery) DB.doc("members/"+uid).set({...S.member, recovery:null}).catch(()=>{});
+      if(S.member.pid && !getMe()) setMe(S.member.pid);
+      if(!was){ subscribe(); watchAdmin(); }
+    } else if(was){ S.unsubs.forEach(f => f()); S.unsubs = []; S.db = null; S.config = null; S.matchdays = []; S.ledger = []; S.votes = []; }
+    render();
+  }, () => { S.memberChecked = true; render(); }));
+  accessUnsubs.push(DB.doc("requests/"+uid).onSnapshot(s => { S.myReq = s.exists ? s.data() : null; render(); }, () => {}));
+}
+function watchAdmin(){
+  accessUnsubs.push(DB.collection("members").onSnapshot(q => { S.members = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}));
+  accessUnsubs.push(DB.collection("requests").onSnapshot(q => { S.requests = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}));
+}
+function joinScreen(){
+  if(S.authErr) return `<section class="card"><h2>Anmeldung nicht möglich</h2><p class="muted small">${esc(S.authErr)}</p><button class="btn" data-act="reload" id="btnReloadAuth">Neu laden</button></section>`;
+  if(!S.uid || !S.memberChecked) return `<div class="empty">Gerät wird geprüft …</div>`;
+  if(S.myReq) return `<section class="card" style="display:grid;gap:12px;text-align:center">
+    <div style="font-size:40px">⏳</div><h2 style="margin:0">Wartet auf Freigabe</h2>
+    <p class="muted small" style="margin:0">Deine Anfrage als <b>${esc(S.myReq.name)}</b> ist angekommen. Sobald jemand aus der Liga sie freigibt, öffnet sich die App hier von selbst.</p>
+    <div><button class="btn sm ghost" data-act="req-cancel" id="btnReqCancel">Anfrage zurückziehen</button></div></section>`;
+  return `<section class="card" style="display:grid;gap:14px">
+    <div><h2 style="margin:0 0 4px">Gerät freischalten</h2><p class="muted small" style="margin:0">Damit nur eure Liga die Daten sieht, muss jedes Gerät einmal freigegeben werden. Danach öffnet sich die App hier immer direkt, ohne Anmeldung.</p></div>
+    <form class="field" id="reqForm"><label for="reqName">Dein Name</label><input class="input" id="reqName" placeholder="z. B. Sven" autocomplete="off" maxlength="40"><button class="btn primary" type="submit" id="btnReq">Freigabe anfragen</button></form>
+    <details><summary class="small muted" style="cursor:pointer">Ich habe einen Wiederherstellungscode</summary>
+      <form class="field" id="recForm" style="margin-top:10px"><label for="recName">Dein Name</label><input class="input" id="recName" autocomplete="off" maxlength="40"><label for="recCode">Wiederherstellungscode</label><input class="input" id="recCode" placeholder="XXXX-XXXX-XXXX" autocomplete="off" autocapitalize="characters" spellcheck="false"><button class="btn" type="submit" id="btnRec">Mit Code freischalten</button></form></details>
+    <p class="note" style="margin:0">Dieses Gerät: ${esc(deviceLabel())}</p></section>`;
+}
+function bindJoin(){
+  $("reqForm")?.addEventListener("submit", ev => { ev.preventDefault(); const nm = $("reqName").value.trim();
+    if(!nm){ toast("Bitte deinen Namen eingeben."); return; }
+    guarded(async () => { try{ await DB.doc("requests/"+S.uid).set({name:nm, device:deviceLabel(), at:Date.now()}); toast("Anfrage gesendet"); }catch(e){ toast("Anfrage fehlgeschlagen. Ist der Liga-Link richtig?"); } }); });
+  $("recForm")?.addEventListener("submit", ev => { ev.preventDefault(); const nm = $("recName").value.trim(); const code = $("recCode").value.trim().toUpperCase();
+    if(!nm || !code){ toast("Bitte Name und Code eingeben."); return; }
+    guarded(async () => { try{ await DB.doc("members/"+S.uid).set({name:nm, pid:null, device:deviceLabel(), at:Date.now(), by:"Wiederherstellungscode", recovery:code}); toast("Gerät freigeschaltet"); }
+      catch(e){ toast(e?.code==="permission-denied" ? "Der Code stimmt nicht." : "Freischalten fehlgeschlagen."); } }); });
+}
+function requestsCard(){
+  if(!S.member || !S.requests.length) return "";
+  const guess = nm => (players().find(p => p.name.trim().toLowerCase()===String(nm||"").trim().toLowerCase()) || {}).id || "";
+  return `<section class="card" style="border:1.5px solid color-mix(in srgb,var(--primary) 45%,var(--line));display:grid;gap:12px">
+    <div class="row between"><h2 style="margin:0">Neue Geräte</h2><span class="pill info">${S.requests.length} ${S.requests.length===1?"Anfrage":"Anfragen"}</span></div>
+    ${S.requests.map(r => `<div style="display:grid;gap:8px;padding-top:10px;border-top:1px solid var(--line)">
+      <div><b>${esc(r.name)}</b> möchte beitreten <span class="muted small">· ${esc(r.device||"")} · ${esc(new Date(r.at||0).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}))}</span></div>
+      <div class="prow"><select class="input" id="rq-${esc(r.id)}" aria-label="Spieler für ${esc(r.name)}"><option value="">Kein Liga-Spieler</option>${players().map(p=>`<option value="${esc(p.id)}" ${p.id===guess(r.name)?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div>
+      <div class="row"><button class="btn primary sm" data-act="req-ok" data-id="${esc(r.id)}">Freigeben</button><button class="btn sm danger" data-act="req-no" data-id="${esc(r.id)}">Ablehnen</button></div></div>`).join("")}
+  </section>`;
+}
+function devicesCard(){
+  if(!S.member) return "";
+  const list = [...S.members].sort((a,b)=>(a.at||0)-(b.at||0));
+  return `<section class="card"><h2>Freigegebene Geräte</h2><div class="list">${list.map(m => { const armed = S.armed==="mem:"+m.id; const self = m.id===S.uid;
+    return `<div class="li"><div class="who">${m.pid ? avatar(m.pid) : `<span class="avatar" style="background:var(--muted)">${esc(initials(m.name))}</span>`}<div style="min-width:0"><div class="pname">${esc(m.pid ? pname(m.pid) : m.name)}${self?` <span class="pill info" style="vertical-align:1px">dieses Gerät</span>`:""}</div><div class="meta">${esc(m.device||"")} · seit ${esc(new Date(m.at||0).toLocaleDateString("de-DE"))}</div></div></div>
+      <button class="btn sm ${armed?"danger armed":"ghost"}" style="${armed?"":"color:var(--muted)"}" data-act="mem-del" data-id="${esc(m.id)}">${armed ? (self?"Wirklich abmelden?":"Wirklich entfernen?") : (self?"Abmelden":"Entfernen")}</button></div>`; }).join("")}</div>
+    <p class="note">Entfernte Geräte sehen sofort keine Daten mehr und müssen neu angefragt werden.</p></section>`;
+}
+
 /* Einmalige Korrektur: Tippfehler im Namen „Danlel“ → „Daniel“ */
 let namesFixed = false;
 function fixNames(){
@@ -1632,7 +1720,14 @@ function subscribe(){
   ];
 }
 S.authChecked = true;
-if(LIGA) subscribe();
+if(LIGA){
+  onAuthStateChanged(auth, u => { S.uid = u ? u.uid : null; if(u) watchAccess(u.uid); render(); });
+  signInAnonymously(auth).catch(e => {
+    S.authErr = e?.code==="auth/operation-not-allowed" || e?.code==="auth/admin-restricted-operation"
+      ? "In Firebase ist die anonyme Anmeldung noch nicht eingeschaltet (Authentication → Anmeldemethode → Anonym)."
+      : "Keine Verbindung. Prüfe deine Internetverbindung und lade neu.";
+    render(); });
+}
 render();
 </script>
 </body>
