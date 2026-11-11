@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Padel-Liga</title>
+<meta name="theme-color" content="#1d5bbd">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Padel-Liga">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Layout: schmale App-Spalte; oben Ligaband mit Tabs, darunter eine Ansicht; Eingaben nur im Bottom-Sheet */
+  --bg:#edf1f6; --surface:#ffffff; --ink:#132339; --muted:#5b6a7f; --line:#d6dde7; --soft:#e5edf8;
+  --court:#1d5bbd; --court-ink:#ffffff; --ball:#e2ef3f; --ball-ink:#1b2a06;
+  --good:#1d8a4b; --good-bg:#e1f3e8; --bad:#be3d2a; --bad-bg:#fbe7e3; --info:#1d5bbd; --info-bg:#e3ecfa;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif; --body:"Barlow",system-ui,-apple-system,sans-serif;
+  --r:12px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d1625; --surface:#152238; --ink:#e7edf6; --muted:#97a6ba; --line:#26364f; --soft:#1b2c47;
+    --court:#3f82ea; --court-ink:#ffffff; --ball:#d9e83c; --ball-ink:#1b2a06;
+    --good:#4cc27f; --good-bg:#16352a; --bad:#f07a63; --bad-bg:#3a1f1d; --info:#7fb0ff; --info-bg:#1a2f52;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d1625; --surface:#152238; --ink:#e7edf6; --muted:#97a6ba; --line:#26364f; --soft:#1b2c47;
+  --court:#3f82ea; --court-ink:#ffffff; --ball:#d9e83c; --ball-ink:#1b2a06;
+  --good:#4cc27f; --good-bg:#16352a; --bad:#f07a63; --bad-bg:#3a1f1d; --info:#7fb0ff; --info-bg:#1a2f52;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45;-webkit-text-size-adjust:100%}
+button,input,select{font:inherit;color:inherit}
+h1,h2,h3{font-family:var(--display);font-weight:700;letter-spacing:.01em;margin:0;text-wrap:balance}
+.num{font-variant-numeric:tabular-nums}
+
+/* Kopf */
+.top{background:var(--court);color:var(--court-ink);padding:18px 16px 0;position:relative;overflow:hidden}
+.top::before{content:"";position:absolute;inset:0;background:
+  linear-gradient(90deg,transparent calc(50% - 1px),rgba(255,255,255,.18) calc(50% - 1px),rgba(255,255,255,.18) calc(50% + 1px),transparent calc(50% + 1px)),
+  linear-gradient(0deg,transparent 0 62%,rgba(255,255,255,.14) 62% calc(62% + 2px),transparent calc(62% + 2px));pointer-events:none}
+.top-inner{max-width:760px;margin:0 auto;position:relative}
+.brand{display:flex;align-items:center;gap:12px}
+.ballmark{width:30px;height:30px;border-radius:50%;background:var(--ball);flex:none;position:relative;box-shadow:inset -3px -3px 0 rgba(0,0,0,.08)}
+.ballmark::after{content:"";position:absolute;inset:4px -8px;border:2px solid rgba(255,255,255,.75);border-radius:50%;border-top-color:transparent;border-bottom-color:transparent;transform:rotate(30deg)}
+.top h1{font-size:30px;text-transform:uppercase;line-height:1}
+.sub{opacity:.85;font-size:14px;margin-top:2px}
+.tabs{display:flex;gap:4px;margin-top:16px;overflow-x:auto}
+.tab{background:none;border:0;color:var(--court-ink);opacity:.78;padding:10px 14px;font-weight:600;border-radius:10px 10px 0 0;cursor:pointer;white-space:nowrap}
+.tab[aria-current="page"]{background:var(--bg);color:var(--ink);opacity:1}
+.tab:focus-visible{outline:2px solid var(--ball);outline-offset:-2px}
+
+main{max-width:760px;margin:0 auto;padding:18px 16px 60px;display:grid;gap:18px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.card h2{font-size:22px;margin-bottom:10px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.between{justify-content:space-between}
+.muted{color:var(--muted)}
+.small{font-size:14px}
+.notice{border-radius:var(--r);padding:12px 14px;background:var(--info-bg);color:var(--ink);font-size:15px}
+.notice.bad{background:var(--bad-bg)}
+
+/* Kacheln */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.tile .k{font-size:13px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.tile .v{font-family:var(--display);font-size:26px;font-weight:700;line-height:1.1;margin-top:4px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.tile.lead{background:var(--court);color:var(--court-ink);border-color:var(--court)}
+.tile.lead .k{color:var(--court-ink);opacity:.8}
+@media (max-width:430px){.tiles{grid-template-columns:1fr 1fr}.tiles .tile:first-child{grid-column:1/-1}}
+
+/* Tabellen */
+.tablewrap{overflow-x:auto;margin:0 -16px;padding:0 16px}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:9px 6px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600}
+th.l,td.l{text-align:left}
+tbody tr:last-child td{border-bottom:0}
+td.pts{font-family:var(--display);font-size:20px;font-weight:700}
+.rank{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:50%;background:var(--soft);font-weight:700;font-size:14px}
+tr.first .rank{background:var(--ball);color:var(--ball-ink)}
+.pname{font-weight:600}
+.form{display:inline-flex;gap:3px}
+.fd{width:18px;height:18px;border-radius:4px;display:inline-grid;place-items:center;font-size:11px;font-weight:700;color:#fff}
+.fd.S{background:var(--good)} .fd.N{background:var(--bad)} .fd.U{background:var(--muted)}
+.pos{color:var(--good)} .neg{color:var(--bad)}
+td.pname{white-space:normal;min-width:90px}
+.show-m{display:none}
+.subline{flex-wrap:wrap;gap:4px 8px;align-items:center;margin-top:3px;font-size:12px;font-weight:500;color:var(--muted)}
+@media (max-width:600px){
+  .hide-m{display:none}
+  .show-m{display:flex}
+  th,td{padding:9px 4px}
+  td.pts{font-size:18px}
+  .tablewrap{margin:0;padding:0}
+  .card{padding:14px 12px}
+  .li{flex-wrap:wrap}
+  .match{font-size:14px;padding:8px}
+}
+
+/* Chips & Buttons */
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--court)}
+.btn.primary{background:var(--court);border-color:var(--court);color:var(--court-ink)}
+.btn.danger{color:var(--bad);border-color:var(--bad)}
+.btn.danger.armed{background:var(--bad);color:#fff}
+.btn.sm{padding:5px 10px;font-size:14px}
+.btn:focus-visible,.chip:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--court);outline-offset:2px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.pill{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 10px;font-size:13px;font-weight:600;white-space:nowrap}
+.pill.good{background:var(--good-bg);color:var(--good)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.pill.info{background:var(--info-bg);color:var(--info)}
+.pill.neutral{background:var(--soft);color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;cursor:pointer;font-weight:600;font-size:15px}
+.chip[aria-pressed="true"]{background:var(--court);border-color:var(--court);color:var(--court-ink)}
+.chip.paid[aria-pressed="true"]{background:var(--good);border-color:var(--good)}
+
+/* Spieltage */
+.md{display:grid;gap:10px}
+.md-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.md-no{font-family:var(--display);font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--court)}
+.md-date{font-family:var(--display);font-size:22px;font-weight:700}
+.match{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;padding:8px 10px;background:var(--soft);border-radius:10px;font-size:15px}
+.match .ta{text-align:left}.match .tb{text-align:right}
+.match .win{font-weight:700}
+.match .sc{font-variant-numeric:tabular-nums;font-weight:600;text-align:center;white-space:nowrap}
+.match .sc b{font-family:var(--display);font-size:18px}
+.empty{text-align:center;padding:28px 16px;color:var(--muted)}
+.list{display:grid}
+.li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.li:last-child{border-bottom:0}
+.li .meta{font-size:13px;color:var(--muted)}
+
+/* Sheet */
+.overlay{position:fixed;inset:0;background:rgba(8,15,28,.5);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.overlay[hidden]{display:none}
+.sheet{background:var(--bg);width:100%;max-width:640px;max-height:92%;border-radius:16px 16px 0 0;display:flex;flex-direction:column;overflow:hidden}
+@media (min-width:700px){.overlay{align-items:center}.sheet{border-radius:16px;max-height:88%}}
+.sheet-head{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:var(--surface);border-bottom:1px solid var(--line)}
+.sheet-head h2{font-size:22px}
+.sheet-body{overflow-y:auto;padding:16px;display:grid;gap:16px}
+.sheet-foot{display:flex;gap:10px;justify-content:space-between;padding:12px 16px;background:var(--surface);border-top:1px solid var(--line);flex-wrap:wrap}
+.field{display:grid;gap:5px}
+.field label,.lbl{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.input,select.input{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:9px 11px;min-height:42px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.medit{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px;display:grid;gap:10px}
+.teams{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center}
+.teams .vs{font-family:var(--display);font-weight:700;color:var(--muted)}
+.team{display:grid;gap:6px}
+.sets{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.set{display:flex;align-items:center;gap:4px}
+.set .input{width:46px;text-align:center;padding:8px 4px;font-variant-numeric:tabular-nums}
+.set span{font-size:12px;color:var(--muted);font-weight:600;margin-right:2px}
+.prow{display:flex;gap:8px;align-items:center}
+
+textarea.input{min-height:160px;font-family:ui-monospace,monospace;font-size:13px}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;z-index:30;max-width:calc(100% - 32px);font-size:15px}
+.toast[hidden]{display:none}
+@media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <div class="ballmark" aria-hidden="true"></div>
+      <div>
+        <h1 id="leagueName">Padel-Liga</h1>
+        <div class="sub" id="leagueSub">Wird geladen …</div>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="Bereiche">
+      <button class="tab" data-act="nav" data-view="tabelle" id="tab-tabelle">Tabelle</button>
+      <button class="tab" data-act="nav" data-view="spieltage" id="tab-spieltage">Spieltage</button>
+      <button class="tab" data-act="nav" data-view="kasse" id="tab-kasse">Kasse</button>
+      <button class="tab" data-act="nav" data-view="einstellungen" id="tab-einstellungen">Liga</button>
+    </nav>
+  </div>
+</header>
+<main id="view"><div class="empty">Daten werden geladen …</div></main>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-head"><h2 id="sheetTitle"></h2><button class="btn sm" data-act="close" id="sheetClose">Schließen</button></div>
+    <div class="sheet-body" id="sheetBody"></div>
+    <div class="sheet-foot" id="sheetFoot"></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc as fdoc, collection as fcol, setDoc, updateDoc, deleteDoc, onSnapshot as fsnap, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyClAD0L79joq8W7bQiMyb-uFIYK_IKBmhc",
+  authDomain: "padel-liga-d9788.firebaseapp.com",
+  projectId: "padel-liga-d9788",
+  storageBucket: "padel-liga-d9788.firebasestorage.app",
+  messagingSenderId: "465446473705",
+  appId: "1:465446473705:web:d0ca6588a9fda78e968578"
+};
+const fbApp = initializeApp(firebaseConfig);
+const auth = getAuth(fbApp);
+const fs = getFirestore(fbApp);
+
+/* Kleine Hülle um Firestore, damit der Rest der App gleich bleibt */
+const flat = (o, pre = "", out = {}) => { for(const [k,v] of Object.entries(o)){ const p = pre ? pre+"."+k : k; if(v && typeof v==="object" && !Array.isArray(v) && Object.keys(v).length) flat(v,p,out); else out[p] = v; } return out; };
+const wrapDoc = s => ({id:s.id, exists:s.exists(), data:() => s.data(), metadata:s.metadata});
+const docRef = r => ({ id:r.id, set:d => setDoc(r,d), update:d => updateDoc(r, flat(d)), delete:() => deleteDoc(r), onSnapshot:(n,e) => fsnap(r, {includeMetadataChanges:true}, s => n(wrapDoc(s)), e) });
+const colRef = path => { const c = fcol(fs, path); return { doc:id => docRef(id ? fdoc(c,id) : fdoc(c)), onSnapshot:(n,e) => fsnap(c, {includeMetadataChanges:true}, q => n({docs:q.docs.map(wrapDoc), metadata:q.metadata}), e) }; };
+const DB = { doc: p => docRef(fdoc(fs,p)), collection: colRef };
+async function importAll(obj){
+  const b = writeBatch(fs); let n = 0;
+  if(obj.config){ b.set(fdoc(fs,"league/config"), obj.config); n++; }
+  for(const m of (obj.matchdays||[])){ const {id, ...rest} = m; if(id){ b.set(fdoc(fs,"matchdays/"+id), rest); n++; } }
+  for(const e of (obj.ledger||[])){ const {id, ...rest} = e; if(id){ b.set(fdoc(fs,"ledger/"+id), rest); n++; } }
+  await b.commit(); return n;
+}
+
+const S = {
+  db:null, noDb:false, authUser:null, authChecked:false, denied:false, unsubs:[], readOnly:false, slow:false,
+  config:null, matchdays:[], ledger:[],
+  loaded:{config:false, md:false, lg:false},
+  view:"tabelle", modal:null, draft:null, armed:null
+};
+const VIEWS = ["tabelle","spieltage","kasse","einstellungen"];
+const eur = new Intl.NumberFormat("de-DE",{style:"currency",currency:"EUR"});
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => Math.random().toString(36).slice(2,10);
+const num = v => { const n = parseFloat(String(v ?? "").replace(",", ".")); return isFinite(n) ? n : 0; };
+const r2 = x => Math.round(x*100)/100;
+const today = () => { const d = new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
+const players = () => Array.isArray(S.config?.players) ? S.config.players : [];
+const pname = id => players().find(p => p.id === id)?.name || "Ehemalig";
+const fmtDate = (d, long) => { if(!d) return "Ohne Datum"; const x = new Date(d+"T12:00:00"); return isNaN(x) ? d : x.toLocaleDateString("de-DE", long ? {weekday:"long",day:"numeric",month:"long",year:"numeric"} : {day:"2-digit",month:"2-digit",year:"numeric"}); };
+const byDate = (a,b) => (a.date||"").localeCompare(b.date||"") || (a.createdAt||0)-(b.createdAt||0);
+const canWrite = () => !!S.db && !S.readOnly;
+const $ = id => document.getElementById(id);
+
+/* ---------- Berechnungen ---------- */
+function result(m){
+  let sa=0,sb=0,ga=0,gb=0,n=0;
+  for(const s of (m.sets||[])){
+    const a = Number(s?.a), b = Number(s?.b);
+    if(!(a>=0 && b>=0) || s?.a==null || s?.b==null) continue;
+    n++; ga+=a; gb+=b;
+    if(a>b) sa++; else if(b>a) sb++;
+  }
+  const w = sa>sb ? "a" : sb>sa ? "b" : ga>gb ? "a" : gb>ga ? "b" : "d";
+  return {sa,sb,ga,gb,w,played:n>0};
+}
+function mdNumbers(){
+  const map = {}; [...S.matchdays].sort(byDate).forEach((m,i)=>map[m.id]=i+1); return map;
+}
+const minPct = () => { const v = S.config?.minPct; return v==null || v==="" ? 50 : Math.max(0, Math.min(100, num(v))); };
+const playedDays = () => S.matchdays.filter(md => (md.matches||[]).some(m => result(m).played)).length;
+const minDays = () => Math.ceil(playedDays() * minPct() / 100);
+/* Einzelwertung eines Spieltags: Siege, dann Spieldifferenz */
+function dayRanking(md){
+  const t = {};
+  (md.participants||[]).forEach(id => t[id] = {id, sp:0, s:0, u:0, gd:0});
+  for(const m of (md.matches||[])){
+    const r = result(m); if(!r.played) continue;
+    for(const [ids,side,mg,tg] of [[m.a,"a",r.ga,r.gb],[m.b,"b",r.gb,r.ga]]){
+      for(const id of (ids||[])){
+        const x = t[id] ||= {id, sp:0, s:0, u:0, gd:0};
+        x.sp++; x.gd += mg-tg;
+        if(r.w==="d") x.u++; else if(r.w===side) x.s++;
+      }
+    }
+  }
+  const rows = Object.values(t).sort((a,b) => (b.s+b.u/2)-(a.s+a.u/2) || b.gd-a.gd || pname(a.id).localeCompare(pname(b.id)));
+  const top = rows[0]; const winners = top && top.sp ? rows.filter(x => x.s+x.u/2===top.s+top.u/2 && x.gd===top.gd).map(x=>x.id) : [];
+  return {rows, winners};
+}
+function standings(){
+  const t = {};
+  players().forEach(p => t[p.id] = {id:p.id,sp:0,s:0,u:0,n:0,gw:0,gl:0,days:0,dayWins:0,form:[]});
+  for(const md of [...S.matchdays].sort(byDate)){
+    const any = (md.matches||[]).some(m => result(m).played);
+    if(any) (md.participants||[]).forEach(id => t[id] && t[id].days++);
+    dayRanking(md).winners.forEach(id => t[id] && t[id].dayWins++);
+    for(const m of (md.matches||[])){
+      const r = result(m); if(!r.played) continue;
+      for(const [ids,side,mg,tg] of [[m.a,"a",r.ga,r.gb],[m.b,"b",r.gb,r.ga]]){
+        for(const id of (ids||[])){
+          const x = t[id]; if(!x) continue;
+          x.sp++; x.gw+=mg; x.gl+=tg;
+          if(r.w==="d"){ x.u++; x.form.push("U"); }
+          else if(r.w===side){ x.s++; x.form.push("S"); }
+          else { x.n++; x.form.push("N"); }
+        }
+      }
+    }
+  }
+  const need = minDays();
+  const rows = Object.values(t).map(x => ({...x, quote: x.sp ? (x.s + x.u/2)/x.sp : 0, gdpm: x.sp ? (x.gw-x.gl)/x.sp : 0, ok: x.sp>0 && x.days >= need}));
+  return rows.sort((a,b) => (b.ok-a.ok) || b.quote-a.quote || b.gdpm-a.gdpm || b.s-a.s || b.sp-a.sp || pname(a.id).localeCompare(pname(b.id)));
+}
+function pairStats(){
+  const map = {};
+  for(const md of S.matchdays) for(const m of (md.matches||[])){
+    const r = result(m); if(!r.played) continue;
+    for(const [ids,side] of [[m.a,"a"],[m.b,"b"]]){
+      if(!ids || ids.length!==2) continue;
+      const k = [...ids].sort().join("+");
+      map[k] ||= {ids:[...ids].sort(), sp:0, s:0};
+      map[k].sp++; if(r.w===side) map[k].s++;
+    }
+  }
+  return Object.values(map).sort((a,b) => b.s/b.sp - a.s/a.sp || b.sp-a.sp);
+}
+function finance(){
+  const f = {}; players().forEach(p => f[p.id] = {id:p.id, owed:0, paid:0});
+  let total=0, paidTotal=0; const openMd = [];
+  for(const md of [...S.matchdays].sort(byDate)){
+    const cost = num(md.courtCost);
+    const parts = (md.participants||[]).filter(id => f[id]);
+    if(cost>0 && parts.length){
+      total += cost; const sh = cost/parts.length; const open = [];
+      for(const id of parts){
+        f[id].owed += sh;
+        if(md.paid?.[id]){ f[id].paid += sh; paidTotal += sh; } else open.push(id);
+      }
+      if(open.length) openMd.push({md, share:sh, open});
+    }
+  }
+  for(const e of S.ledger){
+    const amt = num(e.amount);
+    if(e.type==="cost"){
+      const ps = (e.players||[]).filter(id => f[id]);
+      if(!ps.length) continue;
+      total += amt; ps.forEach(id => f[id].owed += amt/ps.length);
+    } else if(e.type==="payment" && f[e.playerId]){
+      f[e.playerId].paid += amt; paidTotal += amt;
+    }
+  }
+  const rows = Object.values(f).map(x => ({...x, bal: r2(x.paid - x.owed)}));
+  const open = rows.reduce((s,x) => s + Math.max(0, -x.bal), 0);
+  return {rows, total:r2(total), paidTotal:r2(paidTotal), open:r2(open), openMd};
+}
+function balPill(b){
+  if(Math.abs(b) < 0.005) return `<span class="pill good">Ausgeglichen</span>`;
+  if(b < 0) return `<span class="pill bad num">Offen ${eur.format(-b)}</span>`;
+  return `<span class="pill info num">Guthaben ${eur.format(b)}</span>`;
+}
+
+/* ---------- Ansichten ---------- */
+function render(){
+  const cfg = S.config;
+  $("leagueName").textContent = cfg?.name || "Padel-Liga";
+  const nMd = S.matchdays.length, nP = players().length;
+  $("leagueSub").textContent = !allLoaded() ? "Wird geladen …" : cfg ? `${nP} Spieler · ${nMd} ${nMd===1?"Spieltag":"Spieltage"}${cfg.season ? " · "+cfg.season : ""}` : "Noch nicht eingerichtet";
+  VIEWS.forEach(v => { const t = $("tab-"+v); if(v===S.view) t.setAttribute("aria-current","page"); else t.removeAttribute("aria-current"); });
+
+  let html = "";
+  if(!S.authChecked){ $("view").innerHTML = `<div class="empty">Wird geladen …</div>`; return; }
+  if(!S.authUser){
+    $("leagueSub").textContent = "Bitte anmelden";
+    $("view").innerHTML = `<section class="card"><h2>Anmelden</h2><p class="muted">Melde dich mit deinem Google-Konto an. Freigeschaltet sind nur die Konten der Liga-Spieler.</p><button class="btn primary" data-act="login" id="btnLogin">Mit Google anmelden</button></section>`;
+    return;
+  }
+  if(S.denied){
+    $("view").innerHTML = `<section class="card"><h2>Kein Zugriff</h2><p class="muted">Das Konto <b>${esc(S.authUser.email)}</b> ist für diese Liga nicht freigeschaltet. Melde dich mit einem anderen Konto an oder bitte den Admin, deine Adresse freizuschalten.</p><button class="btn" data-act="logout" id="btnLogout2">Abmelden</button></section>`;
+    return;
+  }
+  if(S.noDb) html += `<div class="notice bad">Die Datenbank ist in dieser Ansicht nicht erreichbar. Bitte Seite neu laden.</div>`;
+  else if(S.slow && !allFresh()) html += `<div class="notice">Die Daten lassen sich gerade nicht abrufen. Angezeigte Werte sind eventuell nicht aktuell.</div>`;
+  if(S.readOnly && S.db) html += `<div class="notice">Du kannst die Liga ansehen, aber nichts eintragen. Bitte den Besitzer, dich als Bearbeiter einzuladen.</div>`;
+
+  if(S.db && !allLoaded()){ html += `<div class="empty">Daten werden geladen …</div>`; }
+  else if(S.db && !cfg){
+    html += `<section class="card"><h2>Willkommen in eurer Padel-Liga</h2>
+      <p class="muted">Lege zuerst Liganame und eure Spieler an. Danach könnt ihr Spieltage mit Ergebnissen eintragen und festhalten, wer seinen Platzanteil bezahlt hat.</p>
+      ${canWrite() ? `<div class="row"><button class="btn primary" data-act="open-settings" id="btnSetup">Liga einrichten</button><button class="btn" data-act="open-import" id="btnImport">Daten aus alter App importieren</button></div>` : ""}</section>`;
+  } else if(cfg){
+    html += ({tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
+  }
+  $("view").innerHTML = html;
+}
+function allLoaded(){ return S.loaded.config && S.loaded.md && S.loaded.lg; }
+const fresh = {config:false, md:false, lg:false};
+function allFresh(){ return fresh.config && fresh.md && fresh.lg; }
+
+function viewTable(){
+  const st = standings();
+  const matches = S.matchdays.reduce((s,md) => s + (md.matches||[]).filter(m=>result(m).played).length, 0);
+  if(!matches){
+    return `<section class="card"><h2>Tabelle</h2><div class="empty">Noch keine Ergebnisse. Trag unter „Spieltage“ euren ersten Spieltag ein.${canWrite()?`<div style="margin-top:12px"><button class="btn primary" data-act="new-md" id="btnFirstMd">Ersten Spieltag eintragen</button></div>`:""}</div></section>`;
+  }
+  const lead = st[0]; const need = minDays();
+  const pct = q => (Math.round(q*1000)/10).toLocaleString("de-DE") + " %";
+  const sgn = v => { const s = (Math.round(v*10)/10).toLocaleString("de-DE",{minimumFractionDigits:1}); return v>0 ? "+"+s : s; };
+  let rank = 0; let dividerDone = false;
+  const rows = st.map((x,i) => {
+    let pre = "";
+    if(!x.ok && !dividerDone){ dividerDone = true; pre = `<tr><td colspan="11" class="l muted small" style="padding-top:14px">Noch nicht gewertet: weniger als ${need} ${need===1?"Spieltag":"Spieltage"} (${minPct()} % der Spieltage)</td></tr>`; }
+    if(x.ok) rank++;
+    const form = `<span class="form">${x.form.slice(-5).map(f=>`<span class="fd ${f}" title="${f==="S"?"Sieg":f==="N"?"Niederlage":"Unentschieden"}">${f}</span>`).join("")}</span>`;
+    return pre + `<tr class="${x.ok&&rank===1?"first":""}" ${x.ok?"":`style="opacity:.6"`}><td class="l"><span class="rank">${x.ok?rank:"–"}</span></td>
+      <td class="l pname">${esc(pname(x.id))}
+        <div class="subline show-m"><span>${x.days} Tage</span><span>${x.s}:${x.n} Siege</span>${x.dayWins?`<span>${x.dayWins}× Tagessieg</span>`:""}${form}</div></td>
+      <td class="hide-m">${x.days}</td><td class="hide-m">${x.sp}</td><td class="hide-m">${x.s}</td><td class="hide-m">${x.n}</td>
+      <td class="pts">${x.sp?pct(x.quote):"–"}</td>
+      <td class="${x.gdpm>0?"pos":x.gdpm<0?"neg":""}">${x.sp?sgn(x.gdpm):"–"}</td>
+      <td class="hide-m">${x.gw}:${x.gl}</td><td class="hide-m">${x.dayWins}</td>
+      <td class="l hide-m">${form}</td></tr>`;
+  }).join("");
+  const leader = st.find(x=>x.ok) || lead;
+  const pairs = pairStats();
+  const pairRows = pairs.map(p => `<tr><td class="l pname">${esc(pname(p.ids[0]))} / ${esc(pname(p.ids[1]))}</td><td>${p.sp}</td><td>${p.s}</td><td>${Math.round(p.s/p.sp*100)} %</td></tr>`).join("");
+  return `
+  <div class="tiles">
+    <div class="tile lead"><div class="k">Tabellenführer</div><div class="v">${esc(pname(leader.id))} · ${pct(leader.quote)}</div></div>
+    <div class="tile"><div class="k">Spieltage</div><div class="v">${playedDays()}</div></div>
+    <div class="tile"><div class="k">Matches</div><div class="v">${matches}</div></div>
+  </div>
+  <section class="card"><h2>Tabelle</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th class="l">#</th><th class="l">Spieler</th><th class="hide-m" title="Spieltage dabei">Tage</th><th class="hide-m" title="Matches">Sp</th><th class="hide-m" title="Siege">S</th><th class="hide-m" title="Niederlagen">N</th><th title="Siege geteilt durch Matches">Quote</th><th title="Spieldifferenz pro Match">± / Sp</th><th class="hide-m" title="Spiele gewonnen : verloren">Spiele</th><th class="hide-m" title="Tagessiege">Tagessiege</th><th class="l hide-m">Form</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <p class="muted small" style="margin:10px 0 0">Jeder wird einzeln gewertet, egal mit wem er zusammen gespielt hat. Sortiert wird nach Siegquote, bei Gleichstand nach Spieldifferenz pro Match. In die Wertung kommt, wer bei mindestens ${minPct()} % der Spieltage dabei war (aktuell ${need}).</p>
+  </section>
+  <section class="card"><h2>Paarungen</h2>
+    <div class="tablewrap"><table><thead><tr><th class="l">Team</th><th>Sp</th><th>Siege</th><th>Quote</th></tr></thead><tbody>${pairRows}</tbody></table></div>
+  </section>`;
+}
+
+const roundLabel = (m,i) => m.extra ? "Extra-Runde" : `Runde ${i+1}`;
+function matchLine(m, i){
+  const r = result(m);
+  const ta = (m.a||[]).map(pname).map(esc).join(" / "), tb = (m.b||[]).map(pname).map(esc).join(" / ");
+  const sets = (m.sets||[]).filter(s => s?.a!=null && s?.b!=null);
+  const score = !r.played ? `<span class="muted small">offen</span>`
+    : sets.length===1 ? `<b>${sets[0].a}:${sets[0].b}</b>`
+    : `<b>${r.sa}:${r.sb}</b><div class="small muted">${sets.map(s=>`${s.a}:${s.b}`).join("  ")}</div>`;
+  return `<div><div class="lbl" style="margin:0 0 3px 2px;font-size:11px">${roundLabel(m,i)}</div><div class="match"><div class="ta ${r.played&&r.w==="a"?"win":""}">${ta}</div>
+    <div class="sc">${score}</div>
+    <div class="tb ${r.played&&r.w==="b"?"win":""}">${tb}</div></div></div>`;
+}
+function dayLine(md){
+  const dr = dayRanking(md); if(!dr.winners.length) return "";
+  const names = dr.winners.map(pname).map(esc).join(" & ");
+  const rest = dr.rows.filter(x=>x.sp).map(x => `${esc(pname(x.id))} ${x.s}/${x.sp} (${x.gd>0?"+":""}${x.gd})`).join(" · ");
+  return `<div class="row"><span class="pill" style="background:var(--ball);color:var(--ball-ink)">Tagessieg: ${names}</span><span class="muted small">${rest}</span></div>`;
+}
+function viewMatchdays(){
+  const nums = mdNumbers();
+  const list = [...S.matchdays].sort(byDate).reverse();
+  const head = `<div class="row between"><h2 style="font-size:24px">Spieltage</h2>${canWrite()?`<button class="btn primary" data-act="new-md" id="btnNewMd">+ Neuer Spieltag</button>`:""}</div>`;
+  if(!list.length) return head + `<section class="card"><div class="empty">Noch keine Spieltage eingetragen.</div></section>`;
+  return head + list.map(md => {
+    const cost = num(md.courtCost); const parts = md.participants||[];
+    const paidN = parts.filter(id => md.paid?.[id]).length;
+    const payPill = cost>0 && parts.length ? (paidN===parts.length ? `<span class="pill good">${eur.format(cost)} · alle bezahlt</span>` : `<span class="pill bad">${eur.format(cost)} · ${paidN}/${parts.length} bezahlt</span>`) : `<span class="pill neutral">keine Platzkosten</span>`;
+    return `<section class="card md">
+      <div class="md-head"><div><div class="md-no">Spieltag ${nums[md.id]}</div><div class="md-date">${esc(fmtDate(md.date,true))}</div>
+        <div class="muted small">${md.location?esc(md.location)+" · ":""}${parts.map(pname).map(esc).join(", ")||"Keine Teilnehmer"}</div></div>
+        <div class="row">${payPill}${canWrite()?`<button class="btn sm" data-act="edit-md" data-id="${esc(md.id)}">Bearbeiten</button>`:""}</div></div>
+      ${dayLine(md)}
+      ${(md.matches||[]).length ? (md.matches||[]).map((m,i)=>matchLine(m,i)).join("") : `<div class="muted small">Noch keine Matches eingetragen.</div>`}
+      ${md.note?`<div class="muted small">${esc(md.note)}</div>`:""}
+    </section>`;
+  }).join("");
+}
+
+function viewCash(){
+  const F = finance(); const nums = mdNumbers();
+  const rows = F.rows.map(x => `<div class="li"><div><div class="pname">${esc(pname(x.id))}</div><div class="meta num">Anteil ${eur.format(x.owed)} · bezahlt ${eur.format(x.paid)}</div></div>
+    <div class="row">${balPill(x.bal)}${canWrite() && x.bal < -0.004 ? `<button class="btn sm" data-act="settle" data-id="${esc(x.id)}" data-amt="${-x.bal}">Begleichen</button>`:""}</div></div>`).join("");
+  const openMd = F.openMd.slice().reverse().map(o => `<div class="li" style="align-items:flex-start;flex-direction:column">
+      <div class="small"><b>Spieltag ${nums[o.md.id]}</b> · ${esc(fmtDate(o.md.date))} · je <span class="num">${eur.format(o.share)}</span></div>
+      <div class="chips">${o.open.map(id => `<button class="chip paid" aria-pressed="false" ${canWrite()?"":"disabled"} data-act="mark-paid" data-md="${esc(o.md.id)}" data-id="${esc(id)}" title="Als bezahlt markieren">${esc(pname(id))} ✓</button>`).join("")}</div></div>`).join("");
+  const led = [...S.ledger].sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.createdAt||0)-(a.createdAt||0)).map(e => {
+    const isCost = e.type==="cost";
+    const title = isCost ? `${esc(e.title||"Kosten")} <span class="muted">· geteilt durch ${(e.players||[]).length}</span>` : `${esc(pname(e.playerId))} hat eingezahlt`;
+    const armed = S.armed === "led:"+e.id;
+    return `<div class="li"><div><div>${title}</div><div class="meta">${esc(fmtDate(e.date))}${e.note?" · "+esc(e.note):""}</div></div>
+      <div class="row"><span class="num" style="font-weight:600;${isCost?"color:var(--bad)":"color:var(--good)"}">${isCost?"−":"+"}${eur.format(num(e.amount))}</span>
+      ${canWrite()?`<button class="btn sm danger ${armed?"armed":""}" data-act="del-led" data-id="${esc(e.id)}">${armed?"Wirklich löschen?":"Löschen"}</button>`:""}</div></div>`;
+  }).join("");
+  return `
+  <div class="tiles">
+    <div class="tile lead"><div class="k">Noch offen</div><div class="v">${eur.format(F.open)}</div></div>
+    <div class="tile"><div class="k">Kosten gesamt</div><div class="v">${eur.format(F.total)}</div></div>
+    <div class="tile"><div class="k">Eingezahlt</div><div class="v">${eur.format(F.paidTotal)}</div></div>
+  </div>
+  ${canWrite()?`<div class="row"><button class="btn primary" data-act="new-pay" id="btnNewPay">+ Zahlung erfassen</button><button class="btn" data-act="new-cost" id="btnNewCost">+ Sonstige Kosten</button></div>`:""}
+  <section class="card"><h2>Kontostand pro Spieler</h2><div class="list">${rows}</div>
+    <p class="muted small" style="margin:8px 0 0">Platzkosten eines Spieltags werden gleichmäßig auf die Teilnehmer verteilt. „Begleichen“ trägt eine Zahlung über den offenen Betrag ein.</p></section>
+  <section class="card"><h2>Offene Spieltagsbeiträge</h2>${openMd ? `<p class="muted small" style="margin:0 0 4px">Tippe auf einen Namen, sobald der Anteil bezahlt ist.</p><div class="list">${openMd}</div>` : `<div class="muted">Alle Spieltage sind bezahlt.</div>`}</section>
+  <section class="card"><h2>Zahlungen &amp; sonstige Kosten</h2>${led?`<div class="list">${led}</div>`:`<div class="muted">Noch keine Einträge. Hier landen Einzahlungen (z.&nbsp;B. Vorkasse) und Kosten wie neue Bälle.</div>`}</section>`;
+}
+
+function viewSettings(){
+  const c = S.config; const st = standings();
+  const rows = players().map(p => { const x = st.find(s=>s.id===p.id); return `<div class="li"><div class="pname">${esc(p.name)}</div><div class="meta">${x?.days||0} Spieltage · ${x?.sp||0} Matches</div></div>`; }).join("");
+  return `<section class="card"><div class="row between"><h2>${esc(c.name||"Padel-Liga")}</h2>${canWrite()?`<button class="btn" data-act="open-settings" id="btnEditLeague">Bearbeiten</button>`:""}</div>
+    <div class="grid2 small">
+      <div><div class="lbl">Saison</div>${esc(c.season||"–")}</div>
+      <div><div class="lbl">Platzkosten (Standard)</div><span class="num">${eur.format(num(c.defaultCost))}</span></div>
+      <div><div class="lbl">Mindestteilnahme</div>${minPct()} % der Spieltage</div>
+      <div><div class="lbl">Ort (Standard)</div>${esc(c.defaultLocation||"–")}</div>
+    </div></section>
+  <section class="card"><h2>Spieler</h2><div class="list">${rows}</div></section>
+  <section class="card"><h2>Konto</h2><div class="row between"><div class="small">Angemeldet als <b>${esc(S.authUser?.email||"")}</b></div><button class="btn sm" data-act="logout" id="btnLogout">Abmelden</button></div>
+    <p class="muted small" style="margin:10px 0 0">Nur freigeschaltete Google-Konten können die Liga sehen und bearbeiten.</p>
+    ${canWrite() && !S.matchdays.length && !S.ledger.length ? `<div style="margin-top:10px"><button class="btn sm" data-act="open-import" id="btnImport2">Daten importieren</button></div>` : ""}</section>`;
+}
+
+/* ---------- Bottom-Sheet ---------- */
+function openModal(kind, draft){
+  S.modal = kind; S.draft = draft; S.armed = null;
+  $("overlay").hidden = false; renderModal(true);
+}
+function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = true; }
+function renderModal(first){
+  const body = $("sheetBody"); const top = body.scrollTop;
+  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport}[S.modal];
+  if(!fn) return;
+  const {title, html, foot} = fn();
+  $("sheetTitle").textContent = title; body.innerHTML = html; $("sheetFoot").innerHTML = foot;
+  if(first) body.scrollTop = 0; else body.scrollTop = top;
+}
+function playerOpts(sel, pool){
+  return `<option value="">– wählen –</option>` + pool.map(id => `<option value="${esc(id)}" ${id===sel?"selected":""}>${esc(pname(id))}</option>`).join("");
+}
+function modalMd(){
+  const d = S.draft; const pool = d.participants.length ? d.participants : players().map(p=>p.id);
+  const share = num(d.courtCost) > 0 && d.participants.length ? num(d.courtCost)/d.participants.length : 0;
+  const four = d.participants.length===4;
+  const matches = d.matches.map((m,i) => `<div class="medit">
+    <div class="row between"><span class="lbl">${roundLabel(m,i)}</span><button class="btn sm" data-act="md-del-match" data-i="${i}">Entfernen</button></div>
+    <div class="teams">
+      <div class="team"><select class="input" id="m${i}a0" data-mf="${i}:a:0" aria-label="Team A Spieler 1">${playerOpts(m.a[0],pool)}</select><select class="input" id="m${i}a1" data-mf="${i}:a:1" aria-label="Team A Spieler 2">${playerOpts(m.a[1],pool)}</select></div>
+      <div class="vs">vs</div>
+      <div class="team"><select class="input" id="m${i}b0" data-mf="${i}:b:0" aria-label="Team B Spieler 1">${playerOpts(m.b[0],pool)}</select><select class="input" id="m${i}b1" data-mf="${i}:b:1" aria-label="Team B Spieler 2">${playerOpts(m.b[1],pool)}</select></div>
+    </div>
+    <div class="sets">${m.sets.map((s,j) => `<div class="set"><span>${m.sets.length>1?`Satz ${j+1}`:"Ergebnis"}</span>
+      <input class="input" inputmode="numeric" maxlength="2" id="m${i}s${j}a" data-sf="${i}:${j}:a" value="${s.a??""}" aria-label="Match ${i+1} Satz ${j+1} Team A">
+      <b>:</b><input class="input" inputmode="numeric" maxlength="2" id="m${i}s${j}b" data-sf="${i}:${j}:b" value="${s.b??""}" aria-label="Match ${i+1} Satz ${j+1} Team B"></div>`).join("")}</div>
+  </div>`).join("");
+  const armed = S.armed === "md";
+  return {
+    title: d.isNew ? "Neuer Spieltag" : "Spieltag bearbeiten",
+    html: `
+    <div class="grid2">
+      <div class="field"><label for="f-date">Datum</label><input class="input" type="date" id="f-date" data-f="date" value="${esc(d.date)}"></div>
+      <div class="field"><label for="f-cost">Platzkosten (€)</label><input class="input" inputmode="decimal" id="f-cost" data-f="courtCost" data-rerender="1" value="${esc(d.courtCost)}"></div>
+    </div>
+    <div class="field"><label for="f-loc">Ort / Platz</label><input class="input" id="f-loc" data-f="location" value="${esc(d.location)}" placeholder="z. B. Padel Club, Platz 2"></div>
+    <div class="field"><span class="lbl">Wer war dabei? · ${d.participants.length}/4</span><div class="chips">${players().map(p => `<button class="chip" data-act="md-part" data-id="${esc(p.id)}" aria-pressed="${d.participants.includes(p.id)}">${esc(p.name)}</button>`).join("")}</div>
+      ${d.participants.length>4?`<div class="small" style="color:var(--bad)">Bitte genau 4 Spieler wählen.</div>`:""}</div>
+    <div class="field"><span class="lbl">Runden · je ein Satz</span>
+      ${matches || `<div class="muted small">${four ? "Keine Runden. Erzeuge die drei Standardrunden." : "Wähle 4 Spieler, dann werden die drei Runden automatisch angelegt: jeder spielt einmal mit jedem."}</div>`}
+      <div class="row">
+        ${!d.matches.some(m=>!m.extra) ? `<button class="btn" data-act="md-std" id="btnStd" ${four?"":"disabled"}>3 Standardrunden anlegen</button>` : ""}
+        <button class="btn primary" data-act="md-extra" id="btnExtra" ${four?"":"disabled"} title="Teams für eine zusätzliche Runde auslosen">+ Extra-Runde auslosen</button>
+      </div>
+    </div>
+    <div class="field"><span class="lbl">Bezahlt${share?` · je ${eur.format(share)}`:""}</span>
+      ${d.participants.length ? `<div class="chips">${d.participants.map(id => `<button class="chip paid" data-act="md-paid" data-id="${esc(id)}" aria-pressed="${!!d.paid[id]}">${esc(pname(id))}${d.paid[id]?" ✓":""}</button>`).join("")}</div>` : `<div class="muted small">Erst Teilnehmer wählen.</div>`}
+    </div>
+    <div class="field"><label for="f-note">Notiz</label><input class="input" id="f-note" data-f="note" value="${esc(d.note)}" placeholder="optional"></div>`,
+    foot: `${d.isNew ? "<span></span>" : `<button class="btn danger ${armed?"armed":""}" data-act="md-delete" id="btnDelMd">${armed?"Wirklich löschen?":"Spieltag löschen"}</button>`}
+      <button class="btn primary" data-act="md-save" id="btnSaveMd">Speichern</button>`
+  };
+}
+function modalSettings(){
+  const d = S.draft;
+  const used = new Set(); S.matchdays.forEach(md => { (md.participants||[]).forEach(x=>used.add(x)); (md.matches||[]).forEach(m=>[...(m.a||[]),...(m.b||[])].forEach(x=>used.add(x))); });
+  S.ledger.forEach(e => { if(e.playerId) used.add(e.playerId); (e.players||[]).forEach(x=>used.add(x)); });
+  return {
+    title: S.config ? "Liga bearbeiten" : "Liga einrichten",
+    html: `
+    <div class="grid2">
+      <div class="field"><label for="s-name">Liganame</label><input class="input" id="s-name" data-f="name" value="${esc(d.name)}" placeholder="z. B. Padel-Liga Freitag"></div>
+      <div class="field"><label for="s-season">Saison</label><input class="input" id="s-season" data-f="season" value="${esc(d.season)}" placeholder="z. B. Winter 2026/27"></div>
+    </div>
+    <div class="field"><span class="lbl">Spieler</span>
+      ${d.players.map((p,i) => `<div class="prow"><input class="input" id="s-p${i}" data-pf="${i}" value="${esc(p.name)}" placeholder="Name Spieler ${i+1}" aria-label="Name Spieler ${i+1}">
+        ${used.has(p.id) ? `<span class="muted small" style="white-space:nowrap">hat Einträge</span>` : `<button class="btn sm" data-act="s-del-player" data-i="${i}">Entfernen</button>`}</div>`).join("")}
+      <div><button class="btn sm" data-act="s-add-player" id="btnAddPlayer">+ Spieler</button></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label for="s-cost">Platzkosten pro Spieltag (€)</label><input class="input" inputmode="decimal" id="s-cost" data-f="defaultCost" value="${esc(d.defaultCost)}"></div>
+      <div class="field"><label for="s-loc">Ort (Standard)</label><input class="input" id="s-loc" data-f="defaultLocation" value="${esc(d.defaultLocation)}"></div>
+    </div>
+    <div class="field"><label for="s-min">Mindestteilnahme für die Wertung (% der Spieltage)</label><input class="input" inputmode="numeric" id="s-min" data-f="minPct" value="${esc(d.minPct)}" style="max-width:120px"></div>`,
+    foot: `<span></span><button class="btn primary" data-act="s-save" id="btnSaveSettings">Speichern</button>`
+  };
+}
+function modalPay(){
+  const d = S.draft;
+  return { title:"Zahlung erfassen", html:`
+    <div class="field"><label for="p-player">Wer hat bezahlt?</label><select class="input" id="p-player" data-f="playerId">${playerOpts(d.playerId, players().map(p=>p.id))}</select></div>
+    <div class="grid2">
+      <div class="field"><label for="p-amt">Betrag (€)</label><input class="input" inputmode="decimal" id="p-amt" data-f="amount" value="${esc(d.amount)}"></div>
+      <div class="field"><label for="p-date">Datum</label><input class="input" type="date" id="p-date" data-f="date" value="${esc(d.date)}"></div>
+    </div>
+    <div class="field"><label for="p-note">Notiz</label><input class="input" id="p-note" data-f="note" value="${esc(d.note)}" placeholder="z. B. PayPal, bar, Vorkasse"></div>`,
+    foot:`<span></span><button class="btn primary" data-act="pay-save" id="btnSavePay">Zahlung speichern</button>` };
+}
+function modalCost(){
+  const d = S.draft; const share = d.players.length ? num(d.amount)/d.players.length : 0;
+  return { title:"Sonstige Kosten", html:`
+    <div class="field"><label for="c-title">Wofür?</label><input class="input" id="c-title" data-f="title" value="${esc(d.title)}" placeholder="z. B. Neue Bälle"></div>
+    <div class="grid2">
+      <div class="field"><label for="c-amt">Betrag (€)</label><input class="input" inputmode="decimal" id="c-amt" data-f="amount" data-rerender="1" value="${esc(d.amount)}"></div>
+      <div class="field"><label for="c-date">Datum</label><input class="input" type="date" id="c-date" data-f="date" value="${esc(d.date)}"></div>
+    </div>
+    <div class="field"><span class="lbl">Aufteilen auf${share?` · je ${eur.format(share)}`:""}</span><div class="chips">${players().map(p => `<button class="chip" data-act="cost-player" data-id="${esc(p.id)}" aria-pressed="${d.players.includes(p.id)}">${esc(p.name)}</button>`).join("")}</div></div>`,
+    foot:`<span></span><button class="btn primary" data-act="cost-save" id="btnSaveCost">Kosten speichern</button>` };
+}
+
+function modalImport(){
+  return { title:"Daten importieren", html:`<p class="muted small" style="margin:0">Füge hier den Inhalt der Export-Datei ein. Vorhandene Einträge mit gleicher Kennung werden überschrieben.</p>
+    <div class="field"><label for="i-json">Export-Daten (JSON)</label><textarea class="input" id="i-json" data-f="json" spellcheck="false">${esc(S.draft.json)}</textarea></div>`,
+    foot:`<span></span><button class="btn primary" data-act="imp-save" id="btnDoImport">Importieren</button>` };
+}
+/* ---------- Runden ---------- */
+/* 4 Spieler: jeder spielt genau einmal mit jedem zusammen */
+function pairingsOf(p){ return [{a:[p[0],p[1]],b:[p[2],p[3]]},{a:[p[0],p[2]],b:[p[1],p[3]]},{a:[p[0],p[3]],b:[p[1],p[2]]}]; }
+function standardRounds(parts){ return pairingsOf(parts).map(x => ({id:uid(), a:x.a, b:x.b, sets:emptySets()})); }
+function extraRound(parts){
+  const x = pairingsOf(parts)[Math.floor(Math.random()*3)];
+  const flip = Math.random()<.5; const sh = t => Math.random()<.5 ? [t[1],t[0]] : [...t];
+  return {id:uid(), extra:true, a:sh(flip?x.b:x.a), b:sh(flip?x.a:x.b), sets:emptySets()};
+}
+const hasScore = m => (m.sets||[]).some(s => s.a!=null || s.b!=null);
+const emptySets = () => [{a:null,b:null}];
+
+/* ---------- Speichern ---------- */
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+async function write(fn){
+  if(!S.db){ toast("Keine Verbindung zur Datenbank."); return false; }
+  for(let attempt=0; attempt<2; attempt++){
+    try{ await fn(); return true; }
+    catch(e){
+      const code = e?.code;
+      if(code==="unavailable" && attempt===0){ await sleep(400+Math.random()*700); continue; }
+      if(code==="permission-denied" || code==="invalid_argument"){ S.readOnly = true; render(); toast("Speichern abgelehnt: Du hast keine Bearbeitungsrechte."); }
+      else if(code==="quota_exceeded") toast("Speicher voll: "+(e.message||""));
+      else if(code==="revoked") toast("Zugriff wurde entzogen.");
+      else toast("Speichern fehlgeschlagen. Bitte nochmal versuchen.");
+      return false;
+    }
+  }
+  return false;
+}
+let busy = false;
+async function guarded(fn){ if(busy) return; busy = true; try{ await fn(); } finally { busy = false; } }
+
+function cleanMatches(d){
+  const out = [];
+  for(const [i,m] of d.matches.entries()){
+    const four = [...m.a,...m.b];
+    const empty = four.every(x=>!x) && m.sets.every(s=>s.a==null&&s.b==null);
+    if(empty) continue;
+    if(four.some(x=>!x)) return {err:`Match ${i+1}: Bitte alle vier Spieler wählen.`};
+    if(new Set(four).size!==4) return {err:`Match ${i+1}: Ein Spieler ist doppelt eingetragen.`};
+    out.push({id:m.id||uid(), extra:!!m.extra, a:[...m.a], b:[...m.b], sets:m.sets.filter(s=>s.a!=null&&s.b!=null).map(s=>({a:s.a,b:s.b}))});
+  }
+  return {matches:out};
+}
+async function saveMd(){
+  const d = S.draft; const c = cleanMatches(d);
+  if(c.err){ toast(c.err); return; }
+  if(!d.date){ toast("Bitte ein Datum angeben."); return; }
+  if(d.participants.length!==4){ toast("Bitte genau 4 Spieler auswählen."); return; }
+  if(c.matches.some(m => [...m.a,...m.b].some(p => !d.participants.includes(p)))){ toast("In einer Runde steht ein Spieler, der nicht dabei war."); return; }
+  const parts = [...d.participants];
+  c.matches.forEach(m => [...m.a,...m.b].forEach(p => { if(!parts.includes(p)) parts.push(p); }));
+  const paid = {}; parts.forEach(p => { if(d.paid[p]) paid[p] = true; });
+  const body = {date:d.date, location:(d.location||"").trim(), courtCost:r2(num(d.courtCost)), participants:parts, matches:c.matches, paid, note:(d.note||"").trim(), createdAt:d.createdAt||Date.now(), updatedAt:Date.now()};
+  const ok = await write(() => S.db.doc("matchdays/"+d.id).set(body));
+  if(ok){ closeModal(); toast("Spieltag gespeichert"); }
+}
+async function saveSettings(){
+  const d = S.draft;
+  const ps = d.players.map(p => ({id:p.id, name:(p.name||"").trim()})).filter(p => p.name);
+  if(ps.length<4){ toast("Bitte mindestens 4 Spieler eintragen."); return; }
+  const body = {name:(d.name||"").trim()||"Padel-Liga", season:(d.season||"").trim(), players:ps, defaultCost:r2(num(d.defaultCost)), defaultLocation:(d.defaultLocation||"").trim(),
+    minPct:Math.max(0, Math.min(100, Math.round(num(d.minPct)))), updatedAt:Date.now()};
+  const ok = await write(() => S.db.doc("league/config").set(body));
+  if(ok){ closeModal(); toast("Liga gespeichert"); }
+}
+async function savePay(){
+  const d = S.draft; const amt = r2(num(d.amount));
+  if(!d.playerId){ toast("Bitte einen Spieler wählen."); return; }
+  if(!(amt>0)){ toast("Bitte einen Betrag über 0 € eingeben."); return; }
+  const ok = await write(() => S.db.collection("ledger").doc(d.id).set({type:"payment", playerId:d.playerId, amount:amt, date:d.date||today(), note:(d.note||"").trim(), createdAt:Date.now()}));
+  if(ok){ closeModal(); toast("Zahlung gespeichert"); }
+}
+async function saveCost(){
+  const d = S.draft; const amt = r2(num(d.amount));
+  if(!(amt>0)){ toast("Bitte einen Betrag über 0 € eingeben."); return; }
+  if(!d.players.length){ toast("Bitte mindestens einen Spieler wählen."); return; }
+  const ok = await write(() => S.db.collection("ledger").doc(d.id).set({type:"cost", title:(d.title||"").trim()||"Kosten", amount:amt, date:d.date||today(), players:[...d.players], createdAt:Date.now()}));
+  if(ok){ closeModal(); toast("Kosten gespeichert"); }
+}
+
+/* ---------- Ereignisse ---------- */
+document.addEventListener("click", e => {
+  const el = e.target.closest("[data-act]"); if(!el || el.disabled) return;
+  const a = el.dataset.act, id = el.dataset.id, d = S.draft;
+  if(a!=="del-led" && a!=="md-delete") S.armed = null;
+  switch(a){
+    case "nav": S.view = el.dataset.view; history.replaceState(null,"","#"+S.view); render(); break;
+    case "close": closeModal(); break;
+    case "login": signInWithPopup(auth, new GoogleAuthProvider()).catch(err => {
+        if(err?.code==="auth/popup-blocked" || err?.code==="auth/operation-not-supported-in-this-environment") signInWithRedirect(auth, new GoogleAuthProvider());
+        else if(err?.code!=="auth/popup-closed-by-user" && err?.code!=="auth/cancelled-popup-request") toast("Anmeldung fehlgeschlagen: "+(err?.code||err));
+      }); break;
+    case "logout": signOut(auth); break;
+    case "open-import": openModal("imp", {json:""}); break;
+    case "imp-save": guarded(async () => {
+        let obj; try{ obj = JSON.parse(S.draft.json); }catch{ toast("Das ist kein gültiges JSON."); return; }
+        try{ const n = await importAll(obj); closeModal(); toast(n+" Einträge importiert"); }
+        catch(e){ toast(e?.code==="permission-denied" ? "Keine Berechtigung zum Importieren." : "Import fehlgeschlagen."); }
+      }); break;
+    case "open-settings": {
+      const c = S.config;
+      const ps = c ? players().map(p=>({...p})) : Array.from({length:6},()=>({id:uid(),name:""}));
+      openModal("settings", {name:c?.name||"", season:c?.season||"", players:ps, defaultCost:c?.defaultCost ?? "", defaultLocation:c?.defaultLocation||"", minPct:c?.minPct ?? 50});
+      break; }
+    case "s-add-player": d.players.push({id:uid(),name:""}); renderModal(); break;
+    case "s-del-player": d.players.splice(+el.dataset.i,1); renderModal(); break;
+    case "s-save": guarded(saveSettings); break;
+    case "new-md":
+      openModal("md", {isNew:true, id:uid(), date:today(), location:S.config?.defaultLocation||"", courtCost:S.config?.defaultCost ? String(S.config.defaultCost) : "", participants:[], matches:[], paid:{}, note:""});
+      break;
+    case "edit-md": {
+      const md = S.matchdays.find(m=>m.id===id); if(!md) return;
+      const sets3 = s => { const arr = (s||[]).map(x=>({a:x.a??null,b:x.b??null})); if(!arr.length) arr.push({a:null,b:null}); return arr; };
+      openModal("md", {isNew:false, id:md.id, createdAt:md.createdAt, date:md.date||"", location:md.location||"", courtCost:md.courtCost!=null?String(md.courtCost):"", participants:[...(md.participants||[])],
+        matches:(md.matches||[]).map(m=>({id:m.id||uid(), extra:!!m.extra, a:[m.a?.[0]||"",m.a?.[1]||""], b:[m.b?.[0]||"",m.b?.[1]||""], sets:sets3(m.sets)})), paid:{...(md.paid||{})}, note:md.note||""});
+      break; }
+    case "md-part": {
+      const i = d.participants.indexOf(id); if(i>=0) d.participants.splice(i,1); else d.participants.push(id);
+      const order = players().map(p=>p.id); d.participants.sort((x,y)=>order.indexOf(x)-order.indexOf(y));
+      // Noch ohne Ergebnisse: Runden passend zu den 4 Spielern neu anlegen
+      if(d.participants.length===4 && !d.matches.some(hasScore)) d.matches = standardRounds(d.participants);
+      else if(d.participants.length!==4 && !d.matches.some(hasScore)) d.matches = [];
+      renderModal(); break; }
+    case "md-paid": d.paid[id] = !d.paid[id]; renderModal(); break;
+    case "md-std": d.matches = standardRounds(d.participants).concat(d.matches.filter(m=>m.extra)); renderModal(); break;
+    case "md-extra": d.matches.push(extraRound(d.participants)); renderModal(); toast("Extra-Runde ausgelost"); break;
+    case "md-del-match": d.matches.splice(+el.dataset.i,1); renderModal(); break;
+    case "md-save": guarded(saveMd); break;
+    case "md-delete":
+      if(S.armed!=="md"){ S.armed="md"; renderModal(); break; }
+      guarded(async()=>{ const ok = await write(()=>S.db.doc("matchdays/"+d.id).delete()); if(ok){ closeModal(); toast("Spieltag gelöscht"); } });
+      break;
+    case "new-pay": openModal("pay", {id:uid(), playerId:"", amount:"", date:today(), note:""}); break;
+    case "pay-save": guarded(savePay); break;
+    case "new-cost": openModal("cost", {id:uid(), title:"", amount:"", date:today(), players:players().map(p=>p.id)}); break;
+    case "cost-player": { const i = d.players.indexOf(id); if(i>=0) d.players.splice(i,1); else d.players.push(id); renderModal(); break; }
+    case "cost-save": guarded(saveCost); break;
+    case "settle": {
+      const amt = r2(num(el.dataset.amt));
+      guarded(async()=>{ const ok = await write(()=>S.db.collection("ledger").doc(uid()).set({type:"payment", playerId:id, amount:amt, date:today(), note:"Ausgleich offener Betrag", createdAt:Date.now()})); if(ok) toast(`${pname(id)}: ${eur.format(amt)} eingetragen`); });
+      break; }
+    case "mark-paid": {
+      const mdId = el.dataset.md;
+      guarded(async()=>{ const ok = await write(()=>S.db.doc("matchdays/"+mdId).update({paid:{[id]:true}, updatedAt:Date.now()})); if(ok) toast(`${pname(id)} als bezahlt markiert`); });
+      break; }
+    case "del-led":
+      if(S.armed!=="led:"+id){ S.armed="led:"+id; render(); break; }
+      S.armed = null;
+      guarded(async()=>{ const ok = await write(()=>S.db.collection("ledger").doc(id).delete()); if(ok) toast("Eintrag gelöscht"); });
+      break;
+  }
+});
+document.addEventListener("input", e => {
+  const t = e.target; const d = S.draft; if(!d) return;
+  if(t.dataset.f){ d[t.dataset.f] = t.value; if(t.dataset.rerender) updateShareLabels(); return; }
+  if(t.dataset.pf){ d.players[+t.dataset.pf].name = t.value; return; }
+  if(t.dataset.sf){ const [i,j,side] = t.dataset.sf.split(":"); const v = t.value.replace(/\D/g,""); if(v!==t.value) t.value = v; d.matches[+i].sets[+j][side] = v==="" ? null : parseInt(v,10); return; }
+});
+document.addEventListener("change", e => {
+  const t = e.target; const d = S.draft; if(!d) return;
+  if(t.dataset.mf){ const [i,side,k] = t.dataset.mf.split(":"); d.matches[+i][side][+k] = t.value; }
+  else if(t.dataset.f && t.tagName==="SELECT"){ d[t.dataset.f] = t.value; }
+});
+function updateShareLabels(){
+  // Anteil-Anzeige aktualisieren, ohne das Eingabefeld neu zu zeichnen
+  const active = document.activeElement?.id; renderModal();
+  if(active){ const el = $(active); if(el){ el.focus(); const v = el.value; try{ el.setSelectionRange(v.length, v.length); }catch{} } }
+}
+$("overlay").addEventListener("click", e => { if(e.target.id==="overlay") closeModal(); });
+document.addEventListener("keydown", e => { if(e.key==="Escape" && S.modal) closeModal(); });
+let toastT;
+function toast(msg){ const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(()=>t.hidden=true, 2800); }
+function route(){ const h = location.hash.slice(1); S.view = VIEWS.includes(h) ? h : "tabelle"; render(); }
+window.addEventListener("hashchange", route);
+
+/* ---------- Start ---------- */
+route();
+function subscribe(){
+  S.db = DB; S.denied = false; S.readOnly = false;
+  S.loaded = {config:false, md:false, lg:false}; fresh.config = fresh.md = fresh.lg = false;
+  const slowT = setTimeout(() => { if(!allFresh()){ S.slow = true; if(!allLoaded()) S.loaded = {config:true, md:true, lg:true}; render(); } }, 10000);
+  const done = () => { if(allFresh()){ clearTimeout(slowT); S.slow = false; } };
+  const onErr = e => { clearTimeout(slowT); S.loaded = {config:true, md:true, lg:true}; if(e?.code==="permission-denied") S.denied = true; else toast("Verbindung zur Datenbank unterbrochen. Seite später neu öffnen."); render(); };
+  S.unsubs = [
+    DB.doc("league/config").onSnapshot(s => { S.config = s.exists ? s.data() : null; S.loaded.config = true; if(!s.metadata.fromCache) fresh.config = true; done(); render(); }, onErr),
+    DB.collection("matchdays").onSnapshot(q => { S.matchdays = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.md = true; if(!q.metadata.fromCache) fresh.md = true; done(); render(); }, onErr),
+    DB.collection("ledger").onSnapshot(q => { S.ledger = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.lg = true; if(!q.metadata.fromCache) fresh.lg = true; done(); render(); }, onErr)
+  ];
+}
+onAuthStateChanged(auth, u => {
+  S.unsubs.forEach(f => f()); S.unsubs = [];
+  S.authUser = u; S.authChecked = true; S.config = null; S.matchdays = []; S.ledger = []; S.db = null;
+  if(u) subscribe();
+  render();
+});
+</script>
+</body>
+</html>
