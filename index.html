@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Padel-Masters</title>
-<meta name="theme-color" content="#0B63B6">
+<meta name="theme-color" content="#FFFFFF">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Padel-Masters">
@@ -322,20 +322,20 @@ h1,h2,h3,.md-no,.acc-t{font-family:"Barlow Condensed",sans-serif;font-style:ital
 .brand h1{font-size:26px;line-height:1}
 .logo{background:var(--ball);border-radius:50%}
 .cd{background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.35);border-radius:6px;backdrop-filter:blur(6px)}
-.cd .cd-v{font-family:"Barlow Condensed";font-style:italic;font-weight:800;font-size:20px !important}
+.cd .cd-v{font-family:"Barlow Condensed",sans-serif;font-style:italic;font-weight:800;font-size:20px !important}
 .card{border:0;border-radius:10px;box-shadow:var(--shadow);border-top:4px solid var(--primary)}
-.rank{border-radius:4px;transform:skewX(-10deg);font-family:"Barlow Condensed";font-style:italic;font-size:16px;font-weight:800}
-.btn{border-radius:6px;font-family:"Barlow Condensed";font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:15px}
+.rank{border-radius:4px;transform:skewX(-10deg);font-family:"Barlow Condensed",sans-serif;font-style:italic;font-size:16px;font-weight:800}
+.btn{border-radius:6px;font-family:"Barlow Condensed",sans-serif;font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:15px}
 .btn.primary{background:var(--ball);color:var(--ball-ink);border-color:var(--ball)}
-.vbtn{border-radius:6px;font-family:"Barlow Condensed";font-style:italic;font-weight:800;text-transform:uppercase;font-size:16px}
+.vbtn{border-radius:6px;font-family:"Barlow Condensed",sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:16px}
 .vbtn[aria-pressed="true"].yes{background:var(--primary);border-color:var(--primary)}
 .slot{border-radius:6px}.slot.on{border-color:var(--primary);background:var(--primary-soft)}
 .pill{border-radius:4px;text-transform:uppercase;letter-spacing:.04em;font-size:11px}
-.amt-v,.pts{font-family:"Barlow Condensed";font-style:italic;font-weight:800;font-size:20px !important}
-.score{border-radius:4px;background:var(--navy);color:#fff;border:0;font-family:"Barlow Condensed";font-style:italic}
+.amt-v,.pts{font-family:"Barlow Condensed",sans-serif;font-style:italic;font-weight:800;font-size:20px !important}
+.score{border-radius:4px;background:var(--navy);color:#fff;border:0;font-family:"Barlow Condensed",sans-serif;font-style:italic}
 @media (max-width:759px){.tabs{background:var(--navy);border-top:0}.tab{color:rgba(255,255,255,.6)}.tab[aria-current="page"]{background:var(--ball);color:var(--ball-ink)}}
 .hero{background:linear-gradient(135deg,#08305C,#0B63B6)}
-.alarm{border-radius:6px;font-family:"Barlow Condensed";font-weight:700;text-transform:uppercase}
+.alarm{border-radius:6px;font-family:"Barlow Condensed",sans-serif;font-weight:700;text-transform:uppercase}
 
 /* Court Club im Dunkelmodus */
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
@@ -343,6 +343,44 @@ h1,h2,h3,.md-no,.acc-t{font-family:"Barlow Condensed",sans-serif;font-style:ital
  --primary:#4FA3F0;--primary-ink:#06182B;--primary-soft:#12304E;--navy:#061A33;--navy-2:#0B4F92;--shadow:0 2px 0 #051427;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#07182B;--surface:#0E2238;--surface-2:#13293F;--ink:#EAF2FA;--ink-2:#C2D3E4;--muted:#8AA2BA;--line:#1E3550;
  --primary:#4FA3F0;--primary-ink:#06182B;--primary-soft:#12304E;--navy:#061A33;--navy-2:#0B4F92;--shadow:0 2px 0 #051427;color-scheme:dark}
+#leagueSub{display:none}
+
+/* ===== Court Club, ruhige Variante: mehr Weiß, klare Struktur, Blau nur als Akzent ===== */
+:root{--bg:#F3F6F9;--surface:#FFFFFF;--surface-2:#F1F5F9;--line:#DDE5EE;--shadow:0 1px 2px rgba(10,37,64,.05)}
+h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;letter-spacing:0}
+.card h2,.card-head h2{font-size:20px}
+.appbar{background:var(--surface);color:var(--ink);border-top:4px solid var(--primary);border-bottom:1px solid var(--line);padding-bottom:14px}
+.appbar::before{display:none}
+.brand h1{font-size:24px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink)}
+.logo{background:var(--primary);border-radius:10px}
+.cd{background:var(--primary-soft);border:0;border-radius:10px;color:var(--ink);backdrop-filter:none}
+.cd .cd-l{color:var(--ink-2)}
+.cd .dot{background:var(--primary)}
+.cd .cd-v{font-family:var(--font);font-style:normal;font-weight:700;color:var(--primary);font-size:18px !important}
+.cd.live{background:var(--ball);color:var(--ball-ink)}
+.cd.live .cd-v{color:var(--ball-ink)}
+.card{border:1px solid var(--line);border-top:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+.rank{transform:none;border-radius:8px;font-family:var(--font);font-style:normal;font-size:14px;font-weight:700}
+.btn{border-radius:10px;font-family:var(--font);text-transform:none;letter-spacing:0;font-size:14px;font-weight:600}
+.btn.primary{background:var(--primary);color:var(--primary-ink);border-color:var(--primary)}
+.vbtn{border-radius:10px;font-family:var(--font);font-style:normal;text-transform:none;font-size:14px;font-weight:600}
+.slot{border-radius:10px}
+.pill{border-radius:999px;text-transform:none;letter-spacing:0;font-size:12px}
+.amt-v,.pts{font-family:var(--font);font-style:normal;font-weight:700;font-size:16px !important}
+.score{background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:8px;font-family:var(--font);font-style:normal}
+.alarm{border-radius:999px;font-family:var(--font);text-transform:none}
+@media (max-width:759px){.tabs{background:var(--surface);border-top:1px solid var(--line)}.tab{color:var(--muted)}.tab[aria-current="page"]{background:var(--primary-soft);color:var(--primary)}}
+.hero{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-left:4px solid var(--primary);box-shadow:var(--shadow)}
+.hero::after{display:none}
+.hero .k{color:var(--muted)}
+.hero .big{color:var(--ink)}
+.hero .meta2{color:var(--ink-2)}
+.stats{background:var(--surface-2)}
+.stats>div+div{border-left-color:var(--line)}
+.stats span{color:var(--muted)}
+.podium .p i{background:var(--surface-2);color:var(--ink-2)}
+.acc-ico{background:var(--primary-soft)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--surface-2:#13293F;--line:#1E3550}}
 #leagueSub{display:none}
 </style>
 </head>
@@ -392,7 +430,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.30";
+const APP_VERSION = "2026-11-11.31";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
