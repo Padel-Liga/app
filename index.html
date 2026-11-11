@@ -255,6 +255,27 @@ td.pname{white-space:normal;min-width:96px}
 .me select{min-height:38px;padding:6px 10px;width:auto;flex:1;max-width:220px}
 .daychips{display:flex;gap:6px;flex-wrap:wrap}
 .daychips .chip{padding:6px 11px;font-size:13px}
+/* Alarmknopf für offene Aufgaben */
+.alarm{position:fixed;right:16px;bottom:calc(var(--nav-h) + 18px + env(safe-area-inset-bottom));z-index:16;display:flex;align-items:center;gap:8px;
+  background:var(--bad);color:#fff;border:0;border-radius:999px;padding:12px 18px 12px 14px;font-weight:700;font-size:14px;cursor:pointer;
+  box-shadow:0 8px 24px rgba(210,58,42,.4)}
+.alarm[hidden]{display:none}
+.alarm .n{background:#fff;color:var(--bad);border-radius:999px;min-width:22px;height:22px;display:grid;place-items:center;font-size:12px;padding:0 6px}
+@media (prefers-reduced-motion:no-preference){.alarm{animation:ring 2.4s infinite}@keyframes ring{0%,100%{box-shadow:0 8px 24px rgba(210,58,42,.4),0 0 0 0 rgba(210,58,42,.45)}60%{box-shadow:0 8px 24px rgba(210,58,42,.4),0 0 0 14px rgba(210,58,42,0)}}}
+@media (min-width:760px){.alarm{bottom:24px}}
+.has-alarm main{padding-bottom:calc(var(--nav-h) + 110px + env(safe-area-inset-bottom)) !important}
+/* Aufklappbare Bereiche */
+.acc-head{width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;background:none;border:0;cursor:pointer;text-align:left}
+.acc-head:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
+.acc-ico{width:36px;height:36px;border-radius:11px;background:var(--surface-2);display:grid;place-items:center;font-size:18px;flex:none}
+.acc-t{display:block;font-weight:700;font-size:15px}
+.acc-s{display:block;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.acc-chev{display:inline-flex;transition:transform .15s}
+.acc-head[aria-expanded="true"] .acc-chev{transform:rotate(90deg)}
+.acc-body{padding:4px 16px 16px;border-top:1px solid var(--line);display:grid;gap:4px}
+.acc-body > section.card{border:0;box-shadow:none;padding:12px 0 0;background:none;border-radius:0}
+.acc-body > section.card + section.card{margin-top:12px;border-top:1px solid var(--line)}
+.acc-body .acc-hide{display:none}
 /* Sheet */
 .overlay{position:fixed;inset:0;background:rgba(6,12,26,.55);display:flex;align-items:flex-end;justify-content:center;z-index:20}
 .overlay[hidden]{display:none}
@@ -317,6 +338,7 @@ textarea.input{min-height:160px;font-family:ui-monospace,monospace;font-size:13p
     <div class="sheet-foot" id="sheetFoot"></div>
   </div>
 </div>
+<button class="alarm" id="alarm" data-act="alerts" hidden aria-label="Offene Aufgaben"></button>
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script type="module">
@@ -333,7 +355,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.25";
+const APP_VERSION = "2026-11-11.27";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -519,8 +541,20 @@ function balPill(b){
 }
 
 /* ---------- Ansichten ---------- */
+function alertCount(){ if(!isActive(S.member)) return 0; return S.requests.length + (isBankMe() ? pendingLed().length : 0); }
+function updateAlarm(){
+  const el = $("alarm"); if(!el) return; const n = alertCount();
+  el.hidden = !n; document.body.classList.toggle("has-alarm", !!n);
+  if(n){ const parts = []; if(S.requests.length) parts.push(S.requests.length===1?"Freigabe":"Freigaben"); if(isBankMe() && pendingLed().length) parts.push(pendingLed().length===1?"Zahlung":"Zahlungen");
+    el.innerHTML = `<span aria-hidden="true">🔔</span><span>${parts.join(" & ")} bestätigen</span><span class="n">${n}</span>`; }
+  if(S.modal==="alerts"){ if(n) renderModal(); else closeModal(); }
+}
+function modalAlerts(){
+  return { title:"Zu erledigen", html: (requestsCard() + confirmCard()) || `<div class="empty">Alles erledigt ✓</div>`, foot:"" };
+}
 function render(){
   S._elo = null;
+  try{ updateAlarm(); }catch{}
   tickCountdown();
   const cfg = S.config;
   $("leagueName").textContent = cfg?.name || "Padel-Liga";
@@ -568,8 +602,7 @@ function render(){
       <p class="muted">Lege zuerst Liganame und eure Spieler an. Danach könnt ihr Spieltage mit Ergebnissen eintragen und festhalten, wer seinen Platzanteil bezahlt hat.</p>
       ${canWrite() ? `<div class="row"><button class="btn primary" data-act="open-settings" id="btnSetup">Liga einrichten</button><button class="btn" data-act="open-import" id="btnImport">Daten aus alter App importieren</button></div>` : ""}</section>`;
   } else if(cfg){
-    html += requestsCard();
-    html += confirmCard();
+
     if(S.view==="tabelle" || S.view==="spieltage") html += missingCard();
     if(S.view==="tabelle") html += pollCard();
     html += ({tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
@@ -1073,7 +1106,7 @@ function pushCard(){
       <button class="chip" style="padding:4px 12px;font-size:13px" data-act="push-pref" data-k="${k}" aria-pressed="${prefs[k]!==false}">${prefs[k]!==false?"An":"Aus"}</button></div>`).join("")}</div>
     <div class="row"><button class="btn sm" data-act="push-test" id="btnPushTest">Test-Nachricht senden</button><button class="btn sm ghost" style="color:var(--muted)" data-act="push-off" id="btnPushOff">Auf diesem Gerät ausschalten</button></div>
     ${S.member.pushTest ? `<div class="muted small">Test angefordert · kommt in den nächsten Minuten.</div>` : ""}`;
-  return `<section class="card" style="display:grid;gap:10px"><div class="card-head" style="margin:0"><h2>Benachrichtigungen</h2>${st==="on"?`<span class="pill good">aktiv</span>`:""}</div>${body}
+  return `<section class="card" style="display:grid;gap:10px"><div class="card-head acc-hide" style="margin:0"><h2>Benachrichtigungen</h2>${st==="on"?`<span class="pill good">aktiv</span>`:""}</div>${body}
     <p class="note" style="margin:0">Nachrichten kommen mit ein paar Minuten Verzögerung. Die Einstellungen gelten nur für dieses Gerät.</p></section>`;
 }
 
@@ -1443,29 +1476,51 @@ function modalPlayer(){
     foot: "" };
 }
 
+/* Aufklappbarer Bereich unter „Liga“ */
+function accSection(key, icon, title, sub, badge, content){
+  const open = !!(S.accOpen||{})[key];
+  return `<section class="card acc" style="padding:0;overflow:hidden">
+    <button class="acc-head" data-act="acc-toggle" data-k="${key}" aria-expanded="${open}" id="acc-${key}">
+      <span class="acc-ico" aria-hidden="true">${icon}</span>
+      <span style="flex:1;min-width:0;text-align:left"><span class="acc-t">${title}</span><span class="acc-s">${sub}</span></span>
+      ${badge||""}<span class="acc-chev" aria-hidden="true">${ICON.chev}</span></button>
+    ${open ? `<div class="acc-body">${content}</div>` : ""}
+  </section>`;
+}
 function viewSettings(){
   const c = S.config; const st = standings();
-  const rows = players().map(p => { const x = st.find(s=>s.id===p.id); return `<div class="li"><div class="pname">${esc(p.name)}</div><div class="meta">${x?.days||0} Spieltage · ${x?.sp||0} Matches</div></div>`; }).join("");
-  return `<section class="card"><div class="row between"><h2>${esc(c.name||"Padel-Liga")}</h2>${canWrite()?`<button class="btn" data-act="open-settings" id="btnEditLeague">Bearbeiten</button>`:""}</div>
-    <div class="grid2 small">
+  const rows = players().map(p => { const x = st.find(s=>s.id===p.id); return `<div class="li"><div class="who">${avatar(p.id)}<div class="pname">${esc(p.name)}</div></div><div class="meta">${x?.days||0} Spieltage · ${x?.sp||0} Matches</div></div>`; }).join("");
+  const gs = standings(guests());
+  const grows = guests().map(g => { const x = gs.find(s=>s.id===g.id); return `<div class="li"><div class="who">${avatar(g.id)}<div class="pname">${esc(g.name)}</div></div><div class="meta">${x?.days||0} Spieltage · ${x?.sp||0} Matches</div></div>`; }).join("");
+  const days = [1,2,3,4,5,6,0].filter(x=>sched().days.includes(x)).map(x=>WD[x]).join(" & ");
+  const pst = pushState();
+  const guestMembers = S.members.filter(m => m.pid && isGuest(m.pid));
+  const nDev = S.members.length - guestMembers.length, nGuestAct = guestMembers.filter(isActive).length;
+
+  const liga = `<div class="grid2 small">
       <div><div class="lbl">Saison</div>${esc(c.season||"–")}</div>
+      <div><div class="lbl">Spielzeiten</div>${days} · ${sched().start}–${sched().end}</div>
       <div><div class="lbl">Platzkosten (Standard)</div><span class="num">${eur.format(num(c.defaultCost))}</span></div>
-      <div><div class="lbl">Mindestteilnahme</div>${minPct()} % der Spieltage</div>
-      <div><div class="lbl">Gäste zahlen an</div>${cashier() ? esc(pname(cashier())) : "Liga-Kasse"}</div>
-      <div><div class="lbl">PayPal</div>${ppReady() ? `${esc(ppLabel())} · ${esc(pname(ppOwner()))}` : "nicht eingerichtet"}</div>
-      <div><div class="lbl">Spielzeiten</div>${[1,2,3,4,5,6,0].filter(x=>sched().days.includes(x)).map(x=>WD[x]).join(" & ")} · ${sched().start}–${sched().end}</div>
       <div><div class="lbl">Ort (Standard)</div>${esc(c.defaultLocation||"–")}</div>
-    </div></section>
-  <section class="card"><h2>Spieler</h2><div class="list">${rows}</div></section>
-  ${guests().length ? `<section class="card"><h2>Gäste</h2><div class="list">${(() => { const gs = standings(guests()); return guests().map(g => { const x = gs.find(s=>s.id===g.id); return `<div class="li"><div class="pname">${esc(g.name)}</div><div class="meta">${x?.days||0} Spieltage · ${x?.sp||0} Matches</div></div>`; }).join(""); })()}</div>
-    <p class="muted small" style="margin:8px 0 0">Gäste legst du beim Spieltag an. Umbenennen geht über „Bearbeiten“.</p></section>` : ""}
-  ${pushCard()}
-  ${devicesCard()}
-  <section class="card"><h2>Liga-Link</h2>
-    <p class="muted small" style="margin:0 0 10px">Neue Mitspieler öffnen diesen Link und fragen eine Freigabe an. Ohne Freigabe sieht niemand eure Daten.</p>
+      <div><div class="lbl">Mindestteilnahme</div>${minPct()} % der Spieltage</div>
+      <div><div class="lbl">Kasse / Gäste zahlen an</div>${cashier() ? esc(pname(cashier())) : "Liga-Kasse"}</div>
+      <div><div class="lbl">PayPal</div>${ppReady() ? `${esc(ppLabel())} · ${esc(pname(ppOwner()))}` : "nicht eingerichtet"}</div>
+    </div>
+    ${canWrite()?`<div style="margin-top:14px"><button class="btn" data-act="open-settings" id="btnEditLeague">${ICON.edit}Einstellungen bearbeiten</button></div>`:""}`;
+  const people = `<div class="lbl" style="margin-bottom:2px">Liga-Spieler</div><div class="list">${rows}</div>
+    ${guests().length ? `<div class="lbl" style="margin:14px 0 2px">Gäste</div><div class="list">${grows}</div>` : ""}
+    <p class="note">Gäste legst du beim Spieltag oder in der Abstimmung an. Umbenennen geht unter „Liga-Einstellungen → bearbeiten“.</p>`;
+  const link = `<p class="muted small" style="margin:0 0 10px">Neue Mitspieler öffnen diesen Link und fragen eine Freigabe an. Ohne Freigabe sieht niemand eure Daten.</p>
     <div class="row"><input class="input" id="shareLink" readonly value="${esc(shareLink())}" style="flex:1;min-width:0"><button class="btn sm" data-act="copy-link" id="btnCopy">Kopieren</button></div>
-    ${canWrite() && !S.matchdays.length && !S.ledger.length ? `<div style="margin-top:10px"><button class="btn sm" data-act="open-import" id="btnImport2">Daten importieren</button></div>` : ""}</section>
-  <p class="note" style="text-align:center">App-Version ${APP_VERSION} · <button class="btn ghost sm" data-act="reload" id="btnReload">Neu laden</button></p>`;
+    ${canWrite() && !S.matchdays.length && !S.ledger.length ? `<div style="margin-top:10px"><button class="btn sm" data-act="open-import" id="btnImport2">Daten importieren</button></div>` : ""}
+    <div class="row between" style="margin-top:14px"><span class="small muted">App-Version ${APP_VERSION}</span><button class="btn ghost sm" data-act="reload" id="btnReload">Neu laden</button></div>`;
+
+  return `<div class="page-head"><h2>${esc(c.name||"Padel-Liga")}</h2></div>
+  ${accSection("liga","⚙️","Liga-Einstellungen", `${days} · ${sched().start} Uhr · ${eur.format(num(c.defaultCost))}`, "", liga)}
+  ${accSection("people","👥","Spieler & Gäste", `${players().length} Spieler${guests().length?` · ${guests().length} ${guests().length===1?"Gast":"Gäste"}`:""}`, "", people)}
+  ${accSection("push","🔔","Benachrichtigungen", pst==="on" ? "auf diesem Gerät aktiv" : "auf diesem Gerät aus", pst==="on" ? `<span class="pill good">an</span>` : `<span class="pill neutral">aus</span>`, pushCard())}
+  ${accSection("devices","📱","Geräte & Zugänge", `${nDev} ${nDev===1?"Gerät":"Geräte"}${guestMembers.length?` · ${nGuestAct} von ${guestMembers.length} Gästen aktiv`:""}`, S.requests.length ? `<span class="pill info">${S.requests.length} neu</span>` : "", devicesCard())}
+  ${accSection("link","🔗","Liga-Link & App", "Link teilen, App neu laden", "", link)}`;
 }
 
 /* ---------- Bottom-Sheet ---------- */
@@ -1477,7 +1532,7 @@ function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = tru
 function renderModal(first){
   S._elo = null;
   const body = $("sheetBody"); const top = body.scrollTop;
-  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed}[S.modal];
+  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed, alerts:modalAlerts}[S.modal];
   if(!fn) return;
   const {title, html, foot} = fn();
   $("sheetTitle").textContent = title; body.innerHTML = html; $("sheetFoot").innerHTML = foot;
@@ -1746,6 +1801,8 @@ document.addEventListener("click", e => {
     case "push-pref": { const k = el.dataset.k; const prefs = {...(S.member?.pushPrefs||{})}; prefs[k] = prefs[k]===false; guarded(async () => { await write(() => DB.doc("members/"+S.uid).update({pushPrefs: prefs})); }); break; }
     case "push-test": guarded(async () => { const ok = await write(() => DB.doc("members/"+S.uid).update({pushTest: true})); if(ok) toast("Test angefordert. Er kommt in den nächsten Minuten."); }); break;
     case "push-off": guarded(async () => { const ok = await write(() => DB.doc("members/"+S.uid).update({pushToken: null})); if(ok) toast("Benachrichtigungen auf diesem Gerät aus"); }); break;
+    case "alerts": openModal("alerts", {}); break;
+    case "acc-toggle": S.accOpen = {...(S.accOpen||{}), [el.dataset.k]: !(S.accOpen||{})[el.dataset.k]}; render(); break;
     case "acc": S.openAcc = S.openAcc===id ? null : id; render(); break;
     case "cash-more": S.cashMore = !S.cashMore; render(); break;
     case "led-filter": S.ledFilter = el.dataset.k; S.ledAll = false; render(); break;
