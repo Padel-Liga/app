@@ -332,7 +332,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.13";
+const APP_VERSION = "2026-11-11.14";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -958,6 +958,9 @@ function accountRow(x){
     <div class="amt">${balAmt(x.bal)}</div></div>`;
 }
 /* ---------- Kasse ---------- */
+const LOCK_MS = 24*60*60*1000;
+const ledEditable = e => !!e.createdAt && Date.now() - e.createdAt < LOCK_MS;
+const ledUntil = e => new Date((e.createdAt||0) + LOCK_MS).toLocaleString("de-DE",{weekday:"short",hour:"2-digit",minute:"2-digit"});
 const perGame = () => { const c = num(S.config?.defaultCost); return c > 0 ? c/4 : 0; };
 const gamesLeft = bal => { const g = perGame(); return g && bal > 0.004 ? Math.floor((bal + 0.004)/g) : 0; };
 function creditLine(bal){
@@ -1022,7 +1025,7 @@ function viewCash(){
     const head = mo !== lastMonth ? (lastMonth = mo, `<div class="lbl" style="padding:12px 0 2px">${esc(mo)}</div>`) : "";
     return head + `<div class="li"><div class="who"><span class="tico ${isCost?"cost":isTr?"tr":"pay"}">${isCost?"−":isTr?"⇄":"+"}</span><div style="min-width:0"><div class="pname">${title}</div><div class="meta">${kind} · ${esc(fmtDate(e.date))}${e.note && e.note!=="PayPal"?" · "+esc(e.note):""}</div></div></div>
       <div class="amt"><span class="amt-v" style="color:${isTr?"var(--info)":isCost?"var(--bad)":"var(--good)"}">${isCost?"−":isTr?"":"+"}${eur.format(num(e.amount))}</span>
-      ${canWrite()?`<button class="btn sm ${armed?"danger armed":"ghost"}" style="${armed?"":"color:var(--muted)"}" data-act="del-led" data-id="${esc(e.id)}">${armed?"Wirklich löschen?":"Löschen"}</button>`:""}</div></div>`;
+      ${canWrite() && ledEditable(e) ? `<button class="btn sm ${armed?"danger armed":"ghost"}" style="${armed?"":"color:var(--muted)"}" data-act="del-led" data-id="${esc(e.id)}" title="Änderbar bis ${esc(ledUntil(e))}">${armed?"Wirklich löschen?":"Löschen · bis "+esc(ledUntil(e))}</button>` : `<span class="small muted" title="Buchungen sind nach 24 Stunden gesperrt">🔒 gesperrt</span>`}</div></div>`;
   }).join("");
   const fchip = (k,l) => `<button class="chip" style="padding:5px 11px;font-size:13px" data-act="led-filter" data-k="${k}" aria-pressed="${flt===k}">${l}</button>`;
 
@@ -1040,7 +1043,7 @@ function viewCash(){
   </div>` : ""}
   <section class="card"><div class="card-head"><h2>Kontostand</h2><span class="small muted">Antippen für Details</span></div>
     <div>${rows}</div>
-    <p class="note">Platzkosten werden gleichmäßig auf die Teilnehmer verteilt und mit Guthaben verrechnet.${cashier()?` Gäste zahlen an ${esc(pname(cashier()))}.`:""}</p></section>
+    <p class="note">Platzkosten werden gleichmäßig auf die Teilnehmer verteilt und mit Guthaben verrechnet. Buchungen lassen sich nur in den ersten 24 Stunden löschen.${cashier()?` Gäste zahlen an ${esc(pname(cashier()))}.`:""}</p></section>
   <section class="card"><div class="card-head"><h2>Buchungen</h2><span class="small muted">${ledAll.length}</span></div>
     <div class="chips" style="margin-bottom:4px">${fchip("all","Alle")}${fchip("payment","Zahlungen")}${fchip("transfer","Umbuchungen")}${fchip("cost","Kosten")}</div>
     ${ledHtml ? `<div class="list">${ledHtml}</div>` : `<div class="muted small" style="padding-top:8px">Keine Einträge.</div>`}
@@ -1696,6 +1699,7 @@ document.addEventListener("click", e => {
       guarded(async()=>{ const ok = await write(()=>S.db.doc("matchdays/"+mdId).update({paid:{[id]:true}, updatedAt:Date.now()})); if(ok) toast(`${pname(id)} als bezahlt markiert`); });
       break; }
     case "del-led":
+      if(!ledEditable(S.ledger.find(x=>x.id===id)||{})){ toast("Buchungen lassen sich nur 24 Stunden lang ändern."); break; }
       if(S.armed!=="led:"+id){ S.armed="led:"+id; render(); break; }
       S.armed = null;
       guarded(async()=>{ const ok = await write(()=>S.db.collection("ledger").doc(id).delete()); if(ok) toast("Eintrag gelöscht"); });
