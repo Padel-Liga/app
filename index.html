@@ -320,7 +320,7 @@ textarea.input{min-height:160px;font-family:ui-monospace,monospace;font-size:13p
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc as fdoc, collection as fcol, setDoc, updateDoc, deleteDoc, onSnapshot as fsnap, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc as fdoc, collection as fcol, setDoc, getDoc, updateDoc, deleteDoc, onSnapshot as fsnap, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyClAD0L79joq8W7bQiMyb-uFIYK_IKBmhc",
@@ -330,7 +330,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.3";
+const APP_VERSION = "2026-11-11.4";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 
@@ -348,7 +348,7 @@ const shareLink = () => location.origin + location.pathname + "?liga=" + LIGA;
 /* Kleine Hülle um Firestore, damit der Rest der App gleich bleibt */
 const flat = (o, pre = "", out = {}) => { for(const [k,v] of Object.entries(o)){ const p = pre ? pre+"."+k : k; if(v && typeof v==="object" && !Array.isArray(v) && Object.keys(v).length) flat(v,p,out); else out[p] = v; } return out; };
 const wrapDoc = s => ({id:s.id, exists:s.exists(), data:() => s.data(), metadata:s.metadata});
-const docRef = r => ({ id:r.id, set:d => setDoc(r,d), update:d => updateDoc(r, flat(d)), delete:() => deleteDoc(r), onSnapshot:(n,e) => fsnap(r, {includeMetadataChanges:true}, s => n(wrapDoc(s)), e) });
+const docRef = r => ({ id:r.id, get:async () => wrapDoc(await getDoc(r)), set:d => setDoc(r,d), update:d => updateDoc(r, flat(d)), delete:() => deleteDoc(r), onSnapshot:(n,e) => fsnap(r, {includeMetadataChanges:true}, s => n(wrapDoc(s)), e) });
 const colRef = path => { const c = fcol(fs, path); return { doc:id => docRef(id ? fdoc(c,id) : fdoc(c)), onSnapshot:(n,e) => fsnap(c, {includeMetadataChanges:true}, q => n({docs:q.docs.map(wrapDoc), metadata:q.metadata}), e) }; };
 const DB = { doc: p => docRef(fdoc(fs,BASE+p)), collection: p => colRef(BASE+p) };
 async function importAll(obj){
@@ -541,7 +541,7 @@ function render(){
       <p class="muted">Lege zuerst Liganame und eure Spieler an. Danach könnt ihr Spieltage mit Ergebnissen eintragen und festhalten, wer seinen Platzanteil bezahlt hat.</p>
       ${canWrite() ? `<div class="row"><button class="btn primary" data-act="open-settings" id="btnSetup">Liga einrichten</button><button class="btn" data-act="open-import" id="btnImport">Daten aus alter App importieren</button></div>` : ""}</section>`;
   } else if(cfg){
-    if(S.view==="tabelle" || S.view==="spieltage") html += pollCard();
+    if(S.view==="tabelle") html += pollCard();
     html += ({tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
   }
   $("view").innerHTML = html;
@@ -580,6 +580,7 @@ function countdownText(ns, now = new Date()){
 }
 let lastKey = null;
 function tickCountdown(){
+  try{ autoCreate(); }catch{}
   const el = $("cd"); if(!el) return;
   const ns = S.config ? nextSession() : null;
   if(!ns){ el.hidden = true; return; }
@@ -613,20 +614,31 @@ const ME_KEY = "padel-liga-me";
 const getMe = () => { try{ const v = localStorage.getItem(ME_KEY); return players().some(p=>p.id===v) ? v : ""; }catch{ return ""; } };
 const setMe = v => { try{ localStorage.setItem(ME_KEY, v); }catch{} };
 function pollFor(key){
-  const vs = S.votes.filter(v => v.key===key && players().some(p=>p.id===v.pid));
+  const ok = id => players().some(p=>p.id===id) || guests().some(g=>g.id===id);
+  const vs = S.votes.filter(v => v.key===key && ok(v.pid));
   const by = s => vs.filter(v=>v.s===s).sort((a,b)=>(a.t||0)-(b.t||0)).map(v=>v.pid);
   const yes = by("yes");
   return {yes, play: yes.slice(0,4), wait: yes.slice(4), maybe: by("maybe"), no: by("no"),
-    open: players().map(p=>p.id).filter(id => !vs.some(v=>v.pid===id)), mine: id => vs.find(v=>v.pid===id)?.s || null};
+    open: players().map(p=>p.id).filter(id => !vs.some(v=>v.pid===id)), mine: id => vs.find(v=>v.pid===id)?.s || null,
+    by: id => vs.find(v=>v.pid===id)?.by || null};
 }
+/* Gleiche Auslosung für Vorschau und automatisch angelegten Spieltag: Zufall mit dem Datum als Startwert */
+function seededOrder(ids, key){
+  let h = 2166136261; for(const c of key) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+  const rnd = () => { h = (h + 0x6D2B79F5) >>> 0; let t = h; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  const a = [...ids].sort(); for(let i=a.length-1;i>0;i--){ const j = Math.floor(rnd()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a;
+}
+const plannedRounds = (play, key) => standardRounds(seededOrder(play, key)).map((m,i) => ({...m, id:"r"+i}));
+const mdForDate = key => S.matchdays.find(md => md.date===key);
+
 function pollCard(){
   if(!S.config || !players().length) return "";
   const ns = nextSession(); if(!ns) return "";
   const P = pollFor(ns.key); const me = getMe(); const mine = me ? P.mine(me) : null;
   const full = P.play.length >= 4;
   const status = full ? `<span class="pill good">Spiel steht ✓</span>` : `<span class="pill ${P.play.length?"info":"neutral"}">${P.play.length}/4 dabei</span>`;
-  const names = ids => ids.length ? ids.map(id=>esc(pname(id))).join(", ") : `<span class="muted">–</span>`;
-  const hasMd = S.matchdays.some(md => md.date===ns.key);
+  const one = id => isGuest(id) ? `${esc(pname(id))}<span class="gtag">Gast</span>${canWrite()?`<button class="btn ghost sm" style="min-height:24px;padding:0 6px;color:var(--muted)" data-act="unvote" data-id="${esc(id)}" aria-label="${esc(pname(id))} entfernen">✕</button>`:""}` : esc(pname(id));
+  const names = ids => ids.length ? ids.map(one).join(", ") : `<span class="muted">–</span>`;
   return `<section class="card" style="display:grid;gap:14px">
     <div class="card-head" style="margin:0"><div><h2>Abstimmung · ${fmtSession(ns)}</h2><div class="small muted">${sched().start}–${sched().end} Uhr${ns.live?" · Spiel läuft gerade":" · Spiel "+countdownText(ns)}</div></div>${status}</div>
     <div class="me"><label class="lbl" for="meSel" style="white-space:nowrap">Ich bin</label><select class="input" id="meSel" data-act-change="me"><option value="">– Name wählen –</option>${players().map(p=>`<option value="${esc(p.id)}" ${p.id===me?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div>
@@ -635,16 +647,97 @@ function pollCard(){
       <button class="vbtn maybe" data-act="vote" data-v="maybe" aria-pressed="${mine==="maybe"}" ${me&&canWrite()?"":"disabled"}>? Vielleicht</button>
       <button class="vbtn no" data-act="vote" data-v="no" aria-pressed="${mine==="no"}" ${me&&canWrite()?"":"disabled"}>✕ Kann nicht</button>
     </div>
-    <div class="slots">${[0,1,2,3].map(i => P.play[i] ? `<div class="slot on">${avatar(P.play[i])}<span>${esc(pname(P.play[i]))}</span></div>` : `<div class="slot">Platz ${i+1}<br>frei</div>`).join("")}</div>
+    <div class="slots">${[0,1,2,3].map(i => P.play[i] ? `<div class="slot on">${avatar(P.play[i])}<span>${esc(pname(P.play[i]))}${isGuest(P.play[i])?`<br><span class="gtag" style="margin:0">Gast</span>`:""}</span></div>` : `<div class="slot">Platz ${i+1}<br>frei</div>`).join("")}</div>
     <div class="vlist">
+      ${P.play.some(isGuest)?`<div class="vrow"><span class="k">Gäste</span><span>${names(P.play.filter(isGuest))}</span></div>`:""}
       ${P.wait.length?`<div class="vrow"><span class="k">Warteliste</span><span>${names(P.wait)}</span></div>`:""}
       <div class="vrow"><span class="k">Vielleicht</span><span>${names(P.maybe)}</span></div>
       <div class="vrow"><span class="k">Kann nicht</span><span>${names(P.no)}</span></div>
       <div class="vrow"><span class="k">Noch offen</span><span>${names(P.open)}</span></div>
     </div>
-    <p class="note" style="margin:0">Die ersten vier Zusagen spielen, weitere kommen auf die Warteliste. Nach Spielende um ${sched().end} Uhr startet automatisch die Abstimmung für den nächsten Termin.</p>
-    ${canWrite() && full && !hasMd ? `<button class="btn primary" data-act="new-md" data-poll="${ns.key}" id="btnMdFromPoll">Spieltag mit diesen 4 anlegen</button>` : ""}
+    ${canWrite()?`<div><button class="btn sm" data-act="poll-guest" id="btnPollGuest">${ICON.plus}Gast eintragen</button></div>`:""}
+    <p class="note" style="margin:0">Die ersten vier Zusagen spielen, weitere kommen auf die Warteliste. Steht das Spiel, wird der Spieltag um ${sched().start} Uhr automatisch angelegt. Nach Spielende startet die Abstimmung für den nächsten Termin.</p>
   </section>`;
+}
+function modalPollGuest(){
+  const d = S.draft;
+  const known = guests().filter(g => !pollFor(d.key).yes.includes(g.id));
+  return { title:"Gast eintragen", html:`
+    <p class="muted small" style="margin:0">Der Gast wird als Zusage für ${esc(d.label)} eingetragen und reiht sich in die Reihenfolge der Zusagen ein.</p>
+    ${known.length?`<div class="field"><span class="lbl">Bekannte Gäste</span><div class="chips">${known.map(g=>`<button class="chip" data-act="pg-pick" data-id="${esc(g.id)}" aria-pressed="${d.pick===g.id}">${esc(g.name)}</button>`).join("")}</div></div>`:""}
+    <div class="field"><label for="pg-name">${known.length?"Oder neuer Gast":"Name des Gasts"}</label><input class="input" id="pg-name" data-f="name" value="${esc(d.name)}" placeholder="Name" autocomplete="off"></div>
+    <div class="field"><label for="pg-host">Wer zahlt?</label><select class="input" id="pg-host" data-f="host">${hostOpts(d.host||"")}</select></div>`,
+    foot:`<span></span><button class="btn primary" data-act="pg-save" id="btnPgSave">Gast eintragen</button>` };
+}
+async function savePollGuest(){
+  const d = S.draft; const nm = (d.name||"").trim().replace(/\s+/g," ");
+  let gid = d.pick || null;
+  if(!gid){
+    if(!nm){ toast("Bitte einen bekannten Gast wählen oder einen Namen eingeben."); return; }
+    if(players().some(p => p.name.trim().toLowerCase()===nm.toLowerCase())){ toast(nm+" ist schon Liga-Spieler und kann selbst abstimmen."); return; }
+    const ex = guests().find(g => g.name.trim().toLowerCase()===nm.toLowerCase());
+    if(ex) gid = ex.id;
+    else {
+      const g = {id:"g"+uid(), name:nm}; if(d.host) g.host = d.host;
+      const okG = await write(() => S.db.doc("league/config").update({guests:[...guests(), g], updatedAt:Date.now()}));
+      if(!okG) return; gid = g.id;
+    }
+  }
+  const ok = await write(() => S.db.collection("votes").doc(d.key+"_"+gid).set({key:d.key, pid:gid, s:"yes", t:Date.now(), by:getMe()||null}));
+  if(ok){ closeModal(); toast(pname(gid)+" ist eingetragen"); }
+}
+
+/* Vorschau unter „Spieltage“ */
+function previewCard(){
+  if(!S.config) return "";
+  const ns = nextSession(); if(!ns || mdForDate(ns.key)) return "";
+  const P = pollFor(ns.key); const full = P.play.length >= 4;
+  const nums = mdNumbers(); const n = Object.keys(nums).length + 1;
+  const cost = num(S.config.defaultCost);
+  const rounds = full ? plannedRounds(P.play.slice(0,4), ns.key) : [];
+  return `<section class="card md" style="border:1.5px dashed color-mix(in srgb,var(--primary) 45%,var(--line));box-shadow:none">
+    <div class="md-head">
+      <div class="datebox" style="background:var(--surface-2);color:var(--muted)"><b>${ns.start.getDate()}</b><span>${ns.start.toLocaleDateString("de-DE",{month:"short"}).replace(".","")}</span></div>
+      <div class="md-title"><div class="md-no">Spieltag ${n} <span class="pill neutral" style="vertical-align:2px">Vorschau</span></div><div class="md-sub">${WD[ns.start.getDay()]}, ${sched().start}–${sched().end} Uhr · ${countdownText(ns)}</div></div>
+    </div>
+    ${full ? `<div class="row">${P.play.map(id=>`<span class="dr"><b>${esc(pname(id))}</b>${isGuest(id)?`<span class="gtag">Gast</span>`:""}</span>`).join("")}${cost?`<span class="pill neutral">je ${eur.format(cost/4)}</span>`:""}</div>
+      <div class="rounds">${rounds.map((m,i)=>matchLine(m,i).replace(">offen<",">vs<")).join("")}</div>
+      <p class="note" style="margin:0">Wird um ${sched().start} Uhr automatisch als Spieltag angelegt. Danach könnt ihr die Ergebnisse eintragen.</p>
+      ${canWrite()?`<div><button class="btn sm" data-act="auto-now" data-key="${ns.key}" id="btnAutoNow">Jetzt schon anlegen</button></div>`:""}`
+    : `<div class="slots">${[0,1,2,3].map(i => P.play[i] ? `<div class="slot on">${avatar(P.play[i])}<span>${esc(pname(P.play[i]))}</span></div>` : `<div class="slot">offen</div>`).join("")}</div>
+      <p class="note" style="margin:0">Noch ${4-P.play.length} ${4-P.play.length===1?"Zusage fehlt":"Zusagen fehlen"}. Sobald vier zugesagt haben, stehen hier die Paarungen.</p>
+      <div><button class="btn sm" data-act="nav" data-view="tabelle" id="btnToPoll">Zur Abstimmung</button></div>`}
+  </section>`;
+}
+
+/* Spieltag aus der Abstimmung anlegen (beim Spielbeginn automatisch, oder per Knopf) */
+const autoBusy = new Set();
+async function createFromPoll(key){
+  if(!canWrite() || autoBusy.has(key) || mdForDate(key)) return false;
+  const P = pollFor(key); if(P.play.length < 4) return false;
+  autoBusy.add(key);
+  try{
+    const ref = S.db.doc("matchdays/auto-"+key);
+    const snap = await ref.get(); if(snap.exists) return false;
+    const play = P.play.slice(0,4);
+    const body = {date:key, location:S.config?.defaultLocation||"", courtCost:r2(num(S.config?.defaultCost)), participants:play,
+      matches: plannedRounds(play, key).map(m => ({id:m.id, extra:false, a:m.a, b:m.b, sets:[]})), paid:{}, note:"", auto:true, createdAt:Date.now(), updatedAt:Date.now()};
+    return await write(() => ref.set(body));
+  } finally { autoBusy.delete(key); }
+}
+function lastSessionKeys(now = new Date()){
+  // laufender Termin und Termine der letzten 8 Tage, die schon begonnen haben
+  const sc = sched(); const keys = [];
+  for(let i=0;i<=8;i++){
+    const d = new Date(now); d.setDate(d.getDate()-i);
+    if(!sc.days.includes(d.getDay())) continue;
+    if(atTime(d, sc.start) <= now) keys.push(isoDay(d));
+  }
+  return keys;
+}
+function autoCreate(){
+  if(!S.config || !allFresh() || !canWrite()) return;
+  for(const key of lastSessionKeys()) if(!mdForDate(key) && pollFor(key).play.length>=4) createFromPoll(key);
 }
 function allFresh(){ return fresh.config && fresh.md && fresh.lg; }
 
@@ -740,8 +833,8 @@ function viewMatchdays(){
   const nums = mdNumbers();
   const list = [...S.matchdays].sort(byDate).reverse();
   const head = `<div class="page-head"><h2>Spieltage</h2>${canWrite()?`<button class="btn primary" data-act="new-md" id="btnNewMd">${ICON.plus}Neuer Spieltag</button>`:""}</div>`;
-  if(!list.length) return head + `<section class="card"><div class="empty">Noch keine Spieltage eingetragen.</div></section>`;
-  return head + list.map(md => {
+  if(!list.length) return head + (previewCard() || `<section class="card"><div class="empty">Noch keine Spieltage eingetragen.</div></section>`);
+  return head + previewCard() + list.map(md => {
     const cost = num(md.courtCost); const parts = md.participants||[];
     const paidN = parts.filter(id => md.paid?.[id]).length;
     const payPill = cost>0 && parts.length ? (paidN===parts.length ? `<span class="pill good">${eur.format(cost)} · bezahlt</span>` : `<span class="pill bad">${paidN}/${parts.length} bezahlt</span>`) : `<span class="pill neutral">ohne Kosten</span>`;
@@ -932,7 +1025,7 @@ function openModal(kind, draft){
 function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = true; if(updatePending) reloadFresh(); }
 function renderModal(first){
   const body = $("sheetBody"); const top = body.scrollTop;
-  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer}[S.modal];
+  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest}[S.modal];
   if(!fn) return;
   const {title, html, foot} = fn();
   $("sheetTitle").textContent = title; body.innerHTML = html; $("sheetFoot").innerHTML = foot;
@@ -1174,6 +1267,11 @@ document.addEventListener("click", e => {
     case "close": closeModal(); break;
     case "reload": reloadFresh(); break;
     case "player": openModal("player", {id}); break;
+    case "poll-guest": { const ns = nextSession(); if(!ns) break; openModal("pguest", {key:ns.key, label:fmtSession(ns), name:"", host:"", pick:null}); break; }
+    case "pg-pick": d.pick = d.pick===id ? null : id; renderModal(); break;
+    case "pg-save": guarded(savePollGuest); break;
+    case "unvote": { const ns = nextSession(); if(!ns) break; guarded(async () => { const ok = await write(() => S.db.collection("votes").doc(ns.key+"_"+id).delete()); if(ok) toast(pname(id)+" ausgetragen"); }); break; }
+    case "auto-now": guarded(async () => { const ok = await createFromPoll(el.dataset.key); if(ok) toast("Spieltag angelegt"); }); break;
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
