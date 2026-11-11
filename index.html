@@ -332,7 +332,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.16";
+const APP_VERSION = "2026-11-11.17";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1014,6 +1014,14 @@ function modalCal(){
 }
 
 /* ---------- Kasse ---------- */
+/* Daniel ist die Kasse: Zahlungen anderer gehen an ihn (als Buchung Zahler → Daniel) */
+const bank = () => ppOwner() || cashier();
+function paymentDoc(payer, amt, note, date){
+  const b = bank();
+  return b && payer !== b
+    ? {type:"transfer", from:payer, to:b, amount:amt, date:date||today(), note:note||"", createdAt:Date.now()}
+    : {type:"payment", playerId:payer, amount:amt, date:date||today(), note:note||"", createdAt:Date.now()};
+}
 const LOCK_MS = 24*60*60*1000;
 const ledEditable = e => !!e.createdAt && Date.now() - e.createdAt < LOCK_MS;
 const ledUntil = e => new Date((e.createdAt||0) + LOCK_MS).toLocaleString("de-DE",{weekday:"short",hour:"2-digit",minute:"2-digit"});
@@ -1069,13 +1077,13 @@ function viewCash(){
 
   // Buchungen: Filter, die letzten 5, nach Monat gruppiert
   const flt = S.ledFilter || "all";
-  const ledAll = [...S.ledger].filter(e => flt==="all" || e.type===flt).sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.createdAt||0)-(a.createdAt||0));
+  const ledAll = [...S.ledger].filter(e => flt==="all" || (flt==="payment" ? e.type!=="cost" : e.type===flt)).sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.createdAt||0)-(a.createdAt||0));
   const led = S.ledAll ? ledAll : ledAll.slice(0,5);
   let lastMonth = "";
   const ledHtml = led.map(e => {
     const isCost = e.type==="cost", isTr = e.type==="transfer";
     const title = isCost ? `${esc(e.title||"Kosten")}` : isTr ? `${nameHtml(e.from)} → ${nameHtml(e.to)}` : `${nameHtml(e.playerId)}`;
-    const kind = isCost ? `geteilt durch ${(e.players||[]).length}` : isTr ? (e.note==="PayPal" ? "PayPal" : "Umbuchung") : "Einzahlung";
+    const kind = isCost ? `geteilt durch ${(e.players||[]).length}` : isTr ? (e.note==="PayPal" ? "PayPal-Zahlung" : "Zahlung") : (e.playerId===bank() ? "Vorschuss" : "Einzahlung");
     const armed = S.armed === "led:"+e.id;
     const mo = e.date ? new Date(e.date+"T12:00:00").toLocaleDateString("de-DE",{month:"long",year:"numeric"}) : "";
     const head = mo !== lastMonth ? (lastMonth = mo, `<div class="lbl" style="padding:12px 0 2px">${esc(mo)}</div>`) : "";
@@ -1094,14 +1102,14 @@ function viewCash(){
   </section>
   ${myCard}
   ${canWrite() ? `<div style="display:grid;gap:8px">
-    <div class="row" style="flex-wrap:nowrap"><button class="btn primary" style="flex:1" data-act="new-pay" id="btnNewPay">${ICON.plus}Zahlung erfassen</button><button class="btn" data-act="cash-more" id="btnMore" aria-expanded="${!!S.cashMore}">Mehr ${S.cashMore?"▴":"▾"}</button></div>
-    ${S.cashMore ? `<div class="actions"><button class="btn" data-act="new-transfer" id="btnNewTr">${ICON.swap}Umbuchung</button><button class="btn" data-act="new-cost" id="btnNewCost">${ICON.receipt}Kosten</button>${ppReady()?`<a class="btn" href="${esc(ppLink(0))}" target="_blank" rel="noopener" style="text-decoration:none;color:var(--ink)">${PP_ICON}PayPal</a>`:`<span></span>`}</div>` : ""}
+    <div class="row" style="flex-wrap:nowrap"><button class="btn primary" style="flex:1" data-act="new-pay" id="btnNewPay">${ICON.plus}Zahlung${bank()?" an "+esc(pname(bank())):""} erfassen</button><button class="btn" data-act="cash-more" id="btnMore" aria-expanded="${!!S.cashMore}">Mehr ${S.cashMore?"▴":"▾"}</button></div>
+    ${S.cashMore ? `<div class="actions" style="grid-template-columns:1fr 1fr"><button class="btn" data-act="new-cost" id="btnNewCost">${ICON.receipt}Kosten</button>${ppReady()?`<a class="btn" href="${esc(ppLink(0))}" target="_blank" rel="noopener" style="text-decoration:none;color:var(--ink)">${PP_ICON}PayPal an ${esc(pname(ppOwner()))}</a>`:""}</div>` : ""}
   </div>` : ""}
   <section class="card"><div class="card-head"><h2>Kontostand</h2><span class="small muted">Antippen für Details</span></div>
     <div>${rows}</div>
     <p class="note">Platzkosten werden gleichmäßig auf die Teilnehmer verteilt und mit Guthaben verrechnet. Buchungen lassen sich nur in den ersten 24 Stunden löschen.${cashier()?` Gäste zahlen an ${esc(pname(cashier()))}.`:""}</p></section>
   <section class="card"><div class="card-head"><h2>Buchungen</h2><span class="small muted">${ledAll.length}</span></div>
-    <div class="chips" style="margin-bottom:4px">${fchip("all","Alle")}${fchip("payment","Zahlungen")}${fchip("transfer","Umbuchungen")}${fchip("cost","Kosten")}</div>
+    <div class="chips" style="margin-bottom:4px">${fchip("all","Alle")}${fchip("payment","Zahlungen")}${fchip("cost","Kosten")}</div>
     ${ledHtml ? `<div class="list">${ledHtml}</div>` : `<div class="muted small" style="padding-top:8px">Keine Einträge.</div>`}
     ${ledAll.length > 5 ? `<div style="margin-top:8px"><button class="btn ghost sm" data-act="led-all">${S.ledAll?"Weniger anzeigen":`Alle ${ledAll.length} anzeigen`}</button></div>` : ""}
   </section>`;
@@ -1413,7 +1421,10 @@ function modalMd(){
       </div>
     </div>
     <div class="field"><span class="lbl">Bezahlt${share?` · je ${eur.format(share)}`:""}</span>
-      ${d.participants.length ? `<div class="chips">${d.participants.map(id => `<button class="chip paid" data-act="md-paid" data-id="${esc(id)}" aria-pressed="${!!d.paid[id]}">${nameHtml(id)}${d.paid[id]?" ✓":covMd.has(d.id+"|"+id)?" · Guthaben":""}</button>`).join("")}</div>` : `<div class="muted small">Erst Teilnehmer wählen.</div>`}
+      ${d.participants.length ? `<div class="chips">${d.participants.map(id => bank() && payerOf(id)!==bank()
+        ? `<span class="chip" style="cursor:default;${d.paid[id]||covMd.has(d.id+"|"+id)?"background:var(--good-bg);border-color:var(--good);color:var(--good)":""}">${nameHtml(id)}${d.paid[id]?" ✓":covMd.has(d.id+"|"+id)?" · Guthaben ✓":" · offen"}</span>`
+        : `<button class="chip paid" data-act="md-paid" data-id="${esc(id)}" aria-pressed="${!!d.paid[id]}">${nameHtml(id)}${d.paid[id]?" ✓":covMd.has(d.id+"|"+id)?" · Guthaben":""}</button>`).join("")}</div>
+        ${bank() ? `<div class="muted small">Bezahlt wird in der Kasse über „Zahlung an ${esc(pname(bank()))} erfassen“.</div>` : ""}` : `<div class="muted small">Erst Teilnehmer wählen.</div>`}
     </div>
     <div class="field"><label for="f-note">Notiz</label><input class="input" id="f-note" data-f="note" value="${esc(d.note)}" placeholder="optional"></div>`,
     foot: `${d.isNew ? "<span></span>" : `<button class="btn danger ${armed?"armed":""}" data-act="md-delete" id="btnDelMd">${armed?"Wirklich löschen?":"Spieltag löschen"}</button>`}
@@ -1462,13 +1473,15 @@ function modalSettings(){
 }
 function modalPay(){
   const d = S.draft;
-  return { title:"Zahlung erfassen", html:`
+  const b = bank();
+  return { title: b ? `Zahlung an ${pname(b)} erfassen` : "Zahlung erfassen", html:`
+    ${b ? `<p class="muted small" style="margin:0">Alle Zahlungen gehen an ${esc(pname(b))}. Zahlt ${esc(pname(b))} selbst etwas ein, zählt das als Vorschuss für die Kasse.</p>` : ""}
     <div class="field"><label for="p-player">Wer hat bezahlt?</label><select class="input" id="p-player" data-f="playerId">${playerOpts(d.playerId, [...players(), ...guests()].map(p=>p.id))}</select></div>
     <div class="grid2">
       <div class="field"><label for="p-amt">Betrag (€)</label><input class="input" inputmode="decimal" id="p-amt" data-f="amount" value="${esc(d.amount)}"></div>
       <div class="field"><label for="p-date">Datum</label><input class="input" type="date" id="p-date" data-f="date" value="${esc(d.date)}"></div>
     </div>
-    <div class="field"><label for="p-note">Notiz</label><input class="input" id="p-note" data-f="note" value="${esc(d.note)}" placeholder="z. B. PayPal, bar, Vorkasse"></div>`,
+    <div class="field"><label for="p-note">Notiz</label><input class="input" id="p-note" data-f="note" value="${esc(d.note)}" placeholder="z. B. bar, PayPal"></div>`,
     foot:`<span></span><button class="btn primary" data-act="pay-save" id="btnSavePay">Zahlung speichern</button>` };
 }
 function modalCost(){
@@ -1595,8 +1608,8 @@ async function savePay(){
   const d = S.draft; const amt = r2(num(d.amount));
   if(!d.playerId){ toast("Bitte einen Spieler wählen."); return; }
   if(!(amt>0)){ toast("Bitte einen Betrag über 0 € eingeben."); return; }
-  const ok = await write(() => S.db.collection("ledger").doc(d.id).set({type:"payment", playerId:d.playerId, amount:amt, date:d.date||today(), note:(d.note||"").trim(), createdAt:Date.now()}));
-  if(ok){ closeModal(); toast("Zahlung gespeichert"); }
+  const ok = await write(() => S.db.collection("ledger").doc(d.id).set(paymentDoc(d.playerId, amt, (d.note||"").trim(), d.date)));
+  if(ok){ closeModal(); toast(bank() && d.playerId!==bank() ? `${pname(d.playerId)} → ${pname(bank())}: ${eur.format(amt)} gespeichert` : "Zahlung gespeichert"); }
 }
 async function saveTransfer(){
   const d = S.draft; const amt = r2(num(d.amount));
@@ -1750,11 +1763,18 @@ document.addEventListener("click", e => {
       break; }
     case "settle": {
       const amt = r2(num(el.dataset.amt));
-      guarded(async()=>{ const ok = await write(()=>S.db.collection("ledger").doc(uid()).set({type:"payment", playerId:id, amount:amt, date:today(), note:"Ausgleich offener Betrag", createdAt:Date.now()})); if(ok) toast(`${pname(id)}: ${eur.format(amt)} eingetragen`); });
+      guarded(async()=>{ const ok = await write(()=>S.db.collection("ledger").doc(uid()).set(paymentDoc(id, amt, "Ausgleich offener Betrag"))); if(ok) toast(`${pname(id)}: ${eur.format(amt)}${bank()&&id!==bank()?" an "+pname(bank()):""} eingetragen`); });
       break; }
     case "mark-paid": {
       const mdId = el.dataset.md;
-      guarded(async()=>{ const ok = await write(()=>S.db.doc("matchdays/"+mdId).update({paid:{[id]:true}, updatedAt:Date.now()})); if(ok) toast(`${pname(id)} als bezahlt markiert`); });
+      const md = S.matchdays.find(m=>m.id===mdId); const parts = (md?.participants||[]).length; const sh = parts ? r2(num(md.courtCost)/parts) : 0;
+      const payer = payerOf(id); const b = bank();
+      guarded(async()=>{
+        // Anteil an Daniel bezahlt: als Zahlung buchen; Daniel selbst wird direkt am Spieltag abgehakt
+        const ok = b && payer !== b && sh > 0
+          ? await write(()=>S.db.collection("ledger").doc(uid()).set(paymentDoc(payer, sh, "Spieltag " + (mdNumbers()[mdId]||""), today())))
+          : await write(()=>S.db.doc("matchdays/"+mdId).update({paid:{[id]:true}, updatedAt:Date.now()}));
+        if(ok) toast(`${pname(id)} als bezahlt markiert`); });
       break; }
     case "del-led":
       if(!ledEditable(S.ledger.find(x=>x.id===id)||{})){ toast("Buchungen lassen sich nur 24 Stunden lang ändern."); break; }
