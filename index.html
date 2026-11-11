@@ -332,7 +332,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.11";
+const APP_VERSION = "2026-11-11.12";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -540,7 +540,13 @@ function render(){
     });
     return;
   }
-  document.querySelector(".tabs").style.display = S.member ? "" : "none";
+  document.querySelector(".tabs").style.display = isActive(S.member) ? "" : "none";
+  if(S.member && !isActive(S.member)){
+    $("leagueSub").textContent = "Zugang pausiert";
+    $("view").innerHTML = `<section class="card" style="display:grid;gap:12px;text-align:center"><div style="font-size:40px">⏸️</div><h2 style="margin:0">Zugang pausiert</h2>
+      <p class="muted small" style="margin:0">Hallo ${esc(S.member.name||"")}! Dein Gast-Zugang ist gerade pausiert. Sobald dich jemand aus der Liga wieder aktiviert, öffnet sich die App hier von selbst. Eine neue Anfrage ist nicht nötig.</p></section>`;
+    return;
+  }
   if(!S.member){
     $("leagueSub").textContent = "Gerät nicht freigegeben";
     $("view").innerHTML = joinScreen(); bindJoin();
@@ -1510,6 +1516,8 @@ document.addEventListener("click", e => {
         const ok = await write(() => DB.doc("members/"+S.uid).update({pid:id}));
         if(ok){ await renamePlayer(id, S.member?.name); toast("Erkannt als "+(S.member?.name || pname(id))); } }); break;
     case "req-no": guarded(async () => { const ok = await write(() => DB.doc("requests/"+id).delete()); if(ok) toast("Anfrage abgelehnt"); }); break;
+    case "mem-toggle": { const m = S.members.find(x=>x.id===id); if(!m) break;
+      guarded(async () => { const ok = await write(() => DB.doc("members/"+id).update({active: !isActive(m)})); if(ok) toast(`${m.pid?pname(m.pid):m.name}: Zugang ${isActive(m)?"pausiert":"aktiviert"}`); }); break; }
     case "mem-del":
       if(S.armed!=="mem:"+id){ S.armed = "mem:"+id; render(); break; }
       S.armed = null;
@@ -1667,22 +1675,25 @@ S.uid = null; S.member = null; S.memberChecked = false; S.myReq = null; S.member
 let accessUnsubs = [];
 const deviceLabel = () => { const u = navigator.userAgent; const t = /iPhone/.test(u) ? "iPhone" : /iPad/.test(u) ? "iPad" : /Android/.test(u) ? "Android" : /Mac/.test(u) ? "Mac" : /Windows/.test(u) ? "Windows-PC" : "Gerät";
   const app = (window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone) ? " · Homescreen-App" : " · Browser"; return t + app; };
+function isActive(m){ return !!m && m.active !== false; }
+let adminUnsubs = [];
+function stopData(){ S.unsubs.forEach(f => f()); S.unsubs = []; adminUnsubs.forEach(f => f()); adminUnsubs = []; S.db = null; S.config = null; S.matchdays = []; S.ledger = []; S.votes = []; S.members = []; S.requests = []; }
 function watchAccess(uid){
   accessUnsubs.forEach(f => f()); accessUnsubs = [];
   S.memberChecked = false;
   accessUnsubs.push(DB.doc("members/"+uid).onSnapshot(s => {
-    const was = !!S.member; S.member = s.exists ? s.data() : null; S.memberChecked = true;
-    if(S.member){
-      if(S.member.recovery) DB.doc("members/"+uid).set({...S.member, recovery:null}).catch(()=>{});
-      if(!was){ subscribe(); watchAdmin(); }
-    } else if(was){ S.unsubs.forEach(f => f()); S.unsubs = []; S.db = null; S.config = null; S.matchdays = []; S.ledger = []; S.votes = []; }
+    const was = isActive(S.member); S.member = s.exists ? s.data() : null; S.memberChecked = true;
+    const now = isActive(S.member);
+    if(S.member?.recovery && now) DB.doc("members/"+uid).set({...S.member, recovery:null}).catch(()=>{});
+    if(now && !was){ subscribe(); watchAdmin(); }
+    else if(!now && was) stopData();
     render();
   }, () => { S.memberChecked = true; render(); }));
   accessUnsubs.push(DB.doc("requests/"+uid).onSnapshot(s => { S.myReq = s.exists ? s.data() : null; render(); }, () => {}));
 }
 function watchAdmin(){
-  accessUnsubs.push(DB.collection("members").onSnapshot(q => { S.members = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}));
-  accessUnsubs.push(DB.collection("requests").onSnapshot(q => { S.requests = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}));
+  adminUnsubs.push(DB.collection("members").onSnapshot(q => { S.members = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}));
+  adminUnsubs.push(DB.collection("requests").onSnapshot(q => { S.requests = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}));
 }
 function joinScreen(){
   if(S.authErr) return `<section class="card"><h2>Anmeldung nicht möglich</h2><p class="muted small">${esc(S.authErr)}</p><button class="btn" data-act="reload" id="btnReloadAuth">Neu laden</button></section>`;
@@ -1719,13 +1730,24 @@ function requestsCard(){
       <div class="row"><button class="btn primary sm" data-act="req-ok" data-id="${esc(r.id)}">Freigeben</button><button class="btn sm danger" data-act="req-no" data-id="${esc(r.id)}">Ablehnen</button></div></div>`).join("")}
   </section>`;
 }
+function deviceRow(m){
+  const armed = S.armed==="mem:"+m.id; const self = m.id===S.uid; const guest = m.pid && isGuest(m.pid); const act = isActive(m);
+  return `<div class="li" style="${act?"":"opacity:.75"}"><div class="who">${m.pid ? avatar(m.pid) : `<span class="avatar" style="background:var(--muted)">${esc(initials(m.name))}</span>`}<div style="min-width:0">
+      <div class="pname">${esc(m.pid ? pname(m.pid) : m.name)}${self?` <span class="pill info" style="vertical-align:1px">dieses Gerät</span>`:""}${guest?` <span class="pill ${act?"good":"neutral"}" style="vertical-align:1px">${act?"aktiv":"pausiert"}</span>`:""}</div>
+      <div class="meta">${esc(m.device||"")} · seit ${esc(new Date(m.at||0).toLocaleDateString("de-DE"))}${guest && m.pid ? (() => { const st = standings(guests()).find(x=>x.id===m.pid); return st && st.days ? ` · ${st.days}× mitgespielt` : " · noch nicht mitgespielt"; })() : ""}</div>
+      ${guest && !self ? `<button class="btn ghost sm" style="margin:2px 0 0 -11px" data-act="mem-toggle" data-id="${esc(m.id)}">${act?"Pausieren":"Aktivieren"}</button>` : ""}</div></div>
+    <button class="btn sm ${armed?"danger armed":"ghost"}" style="${armed?"":"color:var(--muted)"}" data-act="mem-del" data-id="${esc(m.id)}">${armed ? (self?"Wirklich abmelden?":"Wirklich entfernen?") : (self?"Abmelden":"Entfernen")}</button></div>`;
+}
 function devicesCard(){
   if(!S.member) return "";
   const list = [...S.members].sort((a,b)=>(a.at||0)-(b.at||0));
-  return `<section class="card"><h2>Freigegebene Geräte</h2><div class="list">${list.map(m => { const armed = S.armed==="mem:"+m.id; const self = m.id===S.uid;
-    return `<div class="li"><div class="who">${m.pid ? avatar(m.pid) : `<span class="avatar" style="background:var(--muted)">${esc(initials(m.name))}</span>`}<div style="min-width:0"><div class="pname">${esc(m.pid ? pname(m.pid) : m.name)}${self?` <span class="pill info" style="vertical-align:1px">dieses Gerät</span>`:""}</div><div class="meta">${esc(m.device||"")} · seit ${esc(new Date(m.at||0).toLocaleDateString("de-DE"))}</div></div></div>
-      <button class="btn sm ${armed?"danger armed":"ghost"}" style="${armed?"":"color:var(--muted)"}" data-act="mem-del" data-id="${esc(m.id)}">${armed ? (self?"Wirklich abmelden?":"Wirklich entfernen?") : (self?"Abmelden":"Entfernen")}</button></div>`; }).join("")}</div>
-    <p class="note">Entfernte Geräte sehen sofort keine Daten mehr und müssen neu angefragt werden.</p></section>`;
+  const gl = list.filter(m => m.pid && isGuest(m.pid)), pl = list.filter(m => !(m.pid && isGuest(m.pid)));
+  const activeG = gl.filter(isActive).length;
+  return `<section class="card"><h2>Freigegebene Geräte</h2><div class="list">${pl.map(deviceRow).join("") || `<div class="muted small">Keine.</div>`}</div>
+    <p class="note">Entfernte Geräte sehen sofort keine Daten mehr und müssen neu anfragen.</p></section>
+  <section class="card"><div class="card-head"><h2>Gast-Zugänge</h2>${gl.length?`<span class="pill info">${activeG} von ${gl.length} aktiv</span>`:""}</div>
+    ${gl.length ? `<div class="list">${gl.map(deviceRow).join("")}</div>` : `<div class="muted small">Noch keine Gäste mit eigenem Zugang. Fragt ein Gast eine Freigabe an, erscheint er hier.</div>`}
+    <p class="note">Pausierte Gäste sehen nichts, behalten aber ihre Freigabe. Spielt jemand wieder mit, einfach auf „Aktivieren“ tippen, eine neue Anfrage ist nicht nötig.</p></section>`;
 }
 
 /* Einmalige Korrektur: Tippfehler im Namen „Danlel“ → „Daniel“ */
