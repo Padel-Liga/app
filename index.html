@@ -205,7 +205,6 @@ textarea.input{min-height:160px;font-family:ui-monospace,monospace;font-size:13p
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc as fdoc, collection as fcol, setDoc, updateDoc, deleteDoc, onSnapshot as fsnap, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -217,20 +216,30 @@ const firebaseConfig = {
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
 const fbApp = initializeApp(firebaseConfig);
-const auth = getAuth(fbApp);
 const fs = getFirestore(fbApp);
+
+/* Liga-Code: steht im Link (?liga=…) und wird auf dem Gerät gemerkt. Ohne Code keine Daten. */
+const LIGA = (() => {
+  let c = new URLSearchParams(location.search).get("liga");
+  if(c && /^[A-Za-z0-9]{16,64}$/.test(c)){ try{ localStorage.setItem("padel-liga-code", c); }catch{} return c; }
+  try{ c = localStorage.getItem("padel-liga-code"); }catch{ c = null; }
+  if(c && /^[A-Za-z0-9]{16,64}$/.test(c)){ history.replaceState(null, "", location.pathname + "?liga=" + c + location.hash); return c; }
+  return null;
+})();
+const BASE = LIGA ? "ligen/" + LIGA + "/" : "";
+const shareLink = () => location.origin + location.pathname + "?liga=" + LIGA;
 
 /* Kleine Hülle um Firestore, damit der Rest der App gleich bleibt */
 const flat = (o, pre = "", out = {}) => { for(const [k,v] of Object.entries(o)){ const p = pre ? pre+"."+k : k; if(v && typeof v==="object" && !Array.isArray(v) && Object.keys(v).length) flat(v,p,out); else out[p] = v; } return out; };
 const wrapDoc = s => ({id:s.id, exists:s.exists(), data:() => s.data(), metadata:s.metadata});
 const docRef = r => ({ id:r.id, set:d => setDoc(r,d), update:d => updateDoc(r, flat(d)), delete:() => deleteDoc(r), onSnapshot:(n,e) => fsnap(r, {includeMetadataChanges:true}, s => n(wrapDoc(s)), e) });
 const colRef = path => { const c = fcol(fs, path); return { doc:id => docRef(id ? fdoc(c,id) : fdoc(c)), onSnapshot:(n,e) => fsnap(c, {includeMetadataChanges:true}, q => n({docs:q.docs.map(wrapDoc), metadata:q.metadata}), e) }; };
-const DB = { doc: p => docRef(fdoc(fs,p)), collection: colRef };
+const DB = { doc: p => docRef(fdoc(fs,BASE+p)), collection: p => colRef(BASE+p) };
 async function importAll(obj){
   const b = writeBatch(fs); let n = 0;
-  if(obj.config){ b.set(fdoc(fs,"league/config"), obj.config); n++; }
-  for(const m of (obj.matchdays||[])){ const {id, ...rest} = m; if(id){ b.set(fdoc(fs,"matchdays/"+id), rest); n++; } }
-  for(const e of (obj.ledger||[])){ const {id, ...rest} = e; if(id){ b.set(fdoc(fs,"ledger/"+id), rest); n++; } }
+  if(obj.config){ b.set(fdoc(fs,BASE+"league/config"), obj.config); n++; }
+  for(const m of (obj.matchdays||[])){ const {id, ...rest} = m; if(id){ b.set(fdoc(fs,BASE+"matchdays/"+id), rest); n++; } }
+  for(const e of (obj.ledger||[])){ const {id, ...rest} = e; if(id){ b.set(fdoc(fs,BASE+"ledger/"+id), rest); n++; } }
   await b.commit(); return n;
 }
 
@@ -371,14 +380,13 @@ function render(){
   VIEWS.forEach(v => { const t = $("tab-"+v); if(v===S.view) t.setAttribute("aria-current","page"); else t.removeAttribute("aria-current"); });
 
   let html = "";
-  if(!S.authChecked){ $("view").innerHTML = `<div class="empty">Wird geladen …</div>`; return; }
-  if(!S.authUser){
-    $("leagueSub").textContent = "Bitte anmelden";
-    $("view").innerHTML = `<section class="card"><h2>Anmelden</h2><p class="muted">Melde dich mit deinem Google-Konto an. Freigeschaltet sind nur die Konten der Liga-Spieler.</p><button class="btn primary" data-act="login" id="btnLogin">Mit Google anmelden</button></section>`;
+  if(!LIGA){
+    $("leagueSub").textContent = "Liga-Link fehlt";
+    $("view").innerHTML = `<section class="card"><h2>Bitte den Liga-Link öffnen</h2><p class="muted">Diese App braucht den persönlichen Link eurer Liga. Er endet auf <b>?liga=…</b>. Frag in eurer Gruppe nach dem Link und öffne ihn einmal, danach merkt sich dein Gerät die Liga.</p></section>`;
     return;
   }
   if(S.denied){
-    $("view").innerHTML = `<section class="card"><h2>Kein Zugriff</h2><p class="muted">Das Konto <b>${esc(S.authUser.email)}</b> ist für diese Liga nicht freigeschaltet. Melde dich mit einem anderen Konto an oder bitte den Admin, deine Adresse freizuschalten.</p><button class="btn" data-act="logout" id="btnLogout2">Abmelden</button></section>`;
+    $("view").innerHTML = `<section class="card"><h2>Kein Zugriff</h2><p class="muted">Die Datenbank hat den Zugriff abgelehnt. Prüfe, ob der Liga-Link vollständig ist.</p></section>`;
     return;
   }
   if(S.noDb) html += `<div class="notice bad">Die Datenbank ist in dieser Ansicht nicht erreichbar. Bitte Seite neu laden.</div>`;
@@ -520,8 +528,9 @@ function viewSettings(){
       <div><div class="lbl">Ort (Standard)</div>${esc(c.defaultLocation||"–")}</div>
     </div></section>
   <section class="card"><h2>Spieler</h2><div class="list">${rows}</div></section>
-  <section class="card"><h2>Konto</h2><div class="row between"><div class="small">Angemeldet als <b>${esc(S.authUser?.email||"")}</b></div><button class="btn sm" data-act="logout" id="btnLogout">Abmelden</button></div>
-    <p class="muted small" style="margin:10px 0 0">Nur freigeschaltete Google-Konten können die Liga sehen und bearbeiten.</p>
+  <section class="card"><h2>Liga-Link</h2>
+    <p class="muted small" style="margin:0 0 10px">Jeder mit diesem Link kann alles sehen und eintragen. Teile ihn nur in eurer Gruppe.</p>
+    <div class="row"><input class="input" id="shareLink" readonly value="${esc(shareLink())}" style="flex:1;min-width:0"><button class="btn sm" data-act="copy-link" id="btnCopy">Kopieren</button></div>
     ${canWrite() && !S.matchdays.length && !S.ledger.length ? `<div style="margin-top:10px"><button class="btn sm" data-act="open-import" id="btnImport2">Daten importieren</button></div>` : ""}</section>`;
 }
 
@@ -725,11 +734,7 @@ document.addEventListener("click", e => {
   switch(a){
     case "nav": S.view = el.dataset.view; history.replaceState(null,"","#"+S.view); render(); break;
     case "close": closeModal(); break;
-    case "login": signInWithPopup(auth, new GoogleAuthProvider()).catch(err => {
-        if(err?.code==="auth/popup-blocked" || err?.code==="auth/operation-not-supported-in-this-environment") signInWithRedirect(auth, new GoogleAuthProvider());
-        else if(err?.code!=="auth/popup-closed-by-user" && err?.code!=="auth/cancelled-popup-request") toast("Anmeldung fehlgeschlagen: "+(err?.code||err));
-      }); break;
-    case "logout": signOut(auth); break;
+    case "copy-link": navigator.clipboard?.writeText(shareLink()).then(() => toast("Link kopiert"), () => { const i = $("shareLink"); i.select(); toast("Link markiert, jetzt kopieren"); }); break;
     case "open-import": openModal("imp", {json:""}); break;
     case "imp-save": guarded(async () => {
         let obj; try{ obj = JSON.parse(S.draft.json); }catch{ toast("Das ist kein gültiges JSON."); return; }
@@ -826,12 +831,9 @@ function subscribe(){
     DB.collection("ledger").onSnapshot(q => { S.ledger = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.lg = true; if(!q.metadata.fromCache) fresh.lg = true; done(); render(); }, onErr)
   ];
 }
-onAuthStateChanged(auth, u => {
-  S.unsubs.forEach(f => f()); S.unsubs = [];
-  S.authUser = u; S.authChecked = true; S.config = null; S.matchdays = []; S.ledger = []; S.db = null;
-  if(u) subscribe();
-  render();
-});
+S.authChecked = true;
+if(LIGA) subscribe();
+render();
 </script>
 </body>
 </html>
