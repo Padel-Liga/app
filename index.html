@@ -332,7 +332,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.10";
+const APP_VERSION = "2026-11-11.11";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -633,7 +633,7 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) tickC
 /* ---------- Abstimmung ---------- */
 const ME_KEY = "padel-liga-me";
 /* Wer bin ich? Ergibt sich aus der Gerätefreigabe */
-const getMe = () => { const v = S.member?.pid; return v && players().some(p=>p.id===v) ? v : ""; };
+const getMe = () => { const v = S.member?.pid; return v && (players().some(p=>p.id===v) || guests().some(g=>g.id===v)) ? v : ""; };
 const setMe = v => { try{ localStorage.setItem(ME_KEY, v); }catch{} };
 function pollNotices(key){ return S.votes.filter(v => v.key===key && v.type==="moveup").sort((a,b)=>(b.t||0)-(a.t||0)); }
 /* Sagt jemand aus den ersten vier ab, rückt der Erste der Warteliste nach: das wird festgehalten und angezeigt */
@@ -668,6 +668,12 @@ function claimBox(){
   return `<div class="notice small" style="display:grid;gap:8px"><span>Welcher Spieler bist du? Einmal auswählen, danach erkennt dich die App auf diesem Gerät.</span>
     <div class="chips">${players().map(p => `<button class="chip" data-act="claim" data-id="${esc(p.id)}">${esc(p.name)}${taken.has(p.id)?` <span class="gtag">vergeben</span>`:""}</button>`).join("")}</div></div>`;
 }
+/* Name aus der Anfrage einem Liga-Spieler zuordnen (gleicher Name oder gleicher Vorname) */
+function matchPlayer(nm){
+  const n = String(nm||"").trim().toLowerCase(); if(!n) return null;
+  const first = n.split(/\s+/)[0];
+  return (players().find(p => p.name.trim().toLowerCase()===n) || players().find(p => p.name.trim().toLowerCase().split(/\s+/)[0]===first) || {}).id || null;
+}
 /* Spielername an den Namen aus der Freigabe anpassen */
 async function renamePlayer(pid, name){
   const nm = String(name||"").trim(); if(!pid || !nm || !S.config) return true;
@@ -684,7 +690,7 @@ function pollCard(){
   const names = ids => ids.length ? ids.map(one).join(", ") : `<span class="muted">–</span>`;
   return `<section class="card" style="display:grid;gap:14px">
     <div class="card-head" style="margin:0"><div><h2>Abstimmung · ${fmtSession(ns)}</h2><div class="small muted">${sched().start}–${sched().end} Uhr${ns.live?" · Spiel läuft gerade":" · Spiel "+countdownText(ns)}</div></div>${status}</div>
-    ${me ? `<div class="small muted">Du stimmst als <b style="color:var(--ink)">${esc(pname(me))}</b> ab.</div>` : claimBox()}
+    ${me ? `<div class="small muted">Du stimmst als <b style="color:var(--ink)">${nameHtml(me)}</b> ab.</div>` : claimBox()}
     <div class="vote">
       <button class="vbtn yes" data-act="vote" data-v="yes" aria-pressed="${mine==="yes"}" ${me&&canWrite()?"":"disabled"}>✓ Dabei</button>
       <button class="vbtn maybe" data-act="vote" data-v="maybe" aria-pressed="${mine==="maybe"}" ${me&&canWrite()?"":"disabled"}>? Vielleicht</button>
@@ -1491,10 +1497,12 @@ document.addEventListener("click", e => {
     case "req-cancel": guarded(async () => { await write(() => DB.doc("requests/"+S.uid).delete()); }); break;
     case "req-ok": { let pid = $("rq-"+id)?.value || null; const r = S.requests.find(x=>x.id===id); if(!r) break;
       guarded(async () => {
-        if(pid==="__new"){
-          const np = {id:uid(), name:r.name.trim()};
-          const okP = await write(() => DB.doc("league/config").update({players:[...players(), np], updatedAt:Date.now()})); if(!okP) return;
-          pid = np.id;
+        if(pid==="__guest"){
+          // Kein Liga-Spieler: als Gast führen (vorhandenen Gast mit gleichem Namen wiederverwenden)
+          const nm = r.name.trim().replace(/\s+/g," ");
+          let g = guests().find(x => x.name.trim().toLowerCase()===nm.toLowerCase());
+          if(!g){ g = {id:"g"+uid(), name:nm}; const okG = await write(() => DB.doc("league/config").update({guests:[...guests(), g], updatedAt:Date.now()})); if(!okG) return; }
+          pid = g.id;
         } else if(pid){ if(!(await renamePlayer(pid, r.name))) return; }
         const ok = await write(() => DB.doc("members/"+id).set({name:r.name, pid, device:r.device||"", at:Date.now(), by:getMe() ? pname(getMe()) : (S.member?.name||"")}));
         if(ok){ await write(() => DB.doc("requests/"+id).delete()); toast(r.name+" ist freigegeben"); } }); break; }
@@ -1701,13 +1709,13 @@ function bindJoin(){
 }
 function requestsCard(){
   if(!S.member || !S.requests.length) return "";
-  const guess = nm => (players().find(p => p.name.trim().toLowerCase()===String(nm||"").trim().toLowerCase()) || {}).id || "";
+  const guess = nm => matchPlayer(nm) || "__guest";
   return `<section class="card" style="border:1.5px solid color-mix(in srgb,var(--primary) 45%,var(--line));display:grid;gap:12px">
     <div class="row between"><h2 style="margin:0">Neue Geräte</h2><span class="pill info">${S.requests.length} ${S.requests.length===1?"Anfrage":"Anfragen"}</span></div>
     ${S.requests.map(r => `<div style="display:grid;gap:8px;padding-top:10px;border-top:1px solid var(--line)">
       <div><b>${esc(r.name)}</b> möchte beitreten <span class="muted small">· ${esc(r.device||"")} · ${esc(new Date(r.at||0).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}))}</span></div>
-      <div class="prow"><select class="input" id="rq-${esc(r.id)}" aria-label="Spieler für ${esc(r.name)}"><option value="">Kein Liga-Spieler (nur ansehen und eintragen)</option><option value="__new">Als neuen Spieler „${esc(r.name)}“ anlegen</option>${players().map(p=>`<option value="${esc(p.id)}" ${p.id===guess(r.name)?"selected":""}>ist ${esc(p.name)}</option>`).join("")}</select></div>
-      <div class="muted small" style="margin-top:-2px">Der Spieler heißt danach überall „${esc(r.name)}“.</div>
+      <div class="prow"><select class="input" id="rq-${esc(r.id)}" aria-label="Spieler für ${esc(r.name)}">${players().map(p=>`<option value="${esc(p.id)}" ${p.id===guess(r.name)?"selected":""}>Liga-Spieler: ${esc(p.name)}</option>`).join("")}<option value="__guest" ${guess(r.name)==="__guest"?"selected":""}>Gast: ${esc(r.name)}</option></select></div>
+      <div class="muted small" style="margin-top:-2px">${guess(r.name)==="__guest" ? `Kein Liga-Spieler mit diesem Namen, deshalb wird ${esc(r.name)} als Gast geführt.` : `Erkannt als Liga-Spieler.`}</div>
       <div class="row"><button class="btn primary sm" data-act="req-ok" data-id="${esc(r.id)}">Freigeben</button><button class="btn sm danger" data-act="req-no" data-id="${esc(r.id)}">Ablehnen</button></div></div>`).join("")}
   </section>`;
 }
