@@ -55,7 +55,8 @@ async function all(coll){ const q = await db.collection(`${base}/${coll}`).get()
 const cfgSnap = await db.doc(`${base}/league/config`).get();
 if(!cfgSnap.exists){ console.log("Keine Liga-Konfiguration."); process.exit(0); }
 const cfg = cfgSnap.data();
-const [members, votes, matchdays, ledger, requests] = await Promise.all(["members","votes","matchdays","ledger","requests"].map(all));
+const [members, votes, matchdays, ledger, requests, results] = await Promise.all(["members","votes","matchdays","ledger","requests","results"].map(all));
+const resById = Object.fromEntries(results.map(r => [r.id, r]));
 const stateRef = db.doc(`${base}/system/push`);
 const state = (await stateRef.get()).data() || {};
 const sent = state.sent || {};
@@ -118,9 +119,21 @@ for(const md of matchdays){
   const since = (now - s.end)/60000;
   if(since < 30 || since > 3*24*60) continue;
   const ms = md.matches || [];
-  if(ms.length && ms.every(x => result(x).played)) continue;
+  const done = x => { const r = resById[`${md.id}__${x.id}`]; return r ? r.status==="confirmed" : result(x).played; };
+  if(ms.length && ms.every(done)) continue;
   const parts = md.participants || [];
   queue(`miss:${md.id}`, "📝 Ergebnisse fehlen", `Für den Spieltag am ${s.label} fehlen noch Ergebnisse.`, forType("missing", mm => parts.includes(mm.pid)));
+}
+// 5b) Ergebnis wartet auf Bestätigung durch das andere Team
+const hasDevice = pid => active.some(m => m.pid===pid) || members.some(m => m.pid===pid && m.active!==false);
+for(const r of results.filter(r => r.status==="proposed")){
+  const md = matchdays.find(x => x.id===r.md); const m = md?.matches?.find(x => x.id===r.match); if(!m) continue;
+  const own = r.side==="a" ? (m.a||[]) : r.side==="b" ? (m.b||[]) : [];
+  const other = r.side==="a" ? (m.b||[]) : r.side==="b" ? (m.a||[]) : [];
+  let who = other.filter(hasDevice);
+  if(!who.length) who = players.map(p=>p.id).filter(id => !own.includes(id) && id!==r.by);
+  const sc = (r.sets||[]).map(s => `${s.a}:${s.b}`).join(" ");
+  queue(`res:${r.id}:${r.at||0}`, "🎾 Ergebnis bestätigen", `${pname(r.by)} hat ${(m.a||[]).map(pname).join(" & ")} ${sc} ${(m.b||[]).map(pname).join(" & ")} eingetragen. Stimmt das?`, forType("resconf", mm => who.includes(mm.pid)));
 }
 // 6) Zahlung wartet auf Bestätigung (an Daniel)
 for(const e of ledger.filter(e => e.status==="pending"))

@@ -264,6 +264,7 @@ td.pname{white-space:normal;min-width:96px}
 @media (prefers-reduced-motion:no-preference){.alarm{animation:ring 2.4s infinite}@keyframes ring{0%,100%{box-shadow:0 8px 24px rgba(210,58,42,.4),0 0 0 0 rgba(210,58,42,.45)}60%{box-shadow:0 8px 24px rgba(210,58,42,.4),0 0 0 14px rgba(210,58,42,0)}}}
 @media (min-width:760px){.alarm{bottom:24px}}
 .has-alarm main{padding-bottom:calc(var(--nav-h) + 110px + env(safe-area-inset-bottom)) !important}
+.resline{grid-column:2;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between;padding:0 12px 10px 4px}
 /* Aufklappbare Bereiche */
 .acc-head{width:100%;display:flex;align-items:center;gap:12px;padding:14px 16px;background:none;border:0;cursor:pointer;text-align:left}
 .acc-head:focus-visible{outline:2px solid var(--primary);outline-offset:-2px}
@@ -430,7 +431,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.31";
+const APP_VERSION = "2026-11-11.32";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -460,7 +461,7 @@ async function importAll(obj){
   await b.commit(); return n;
 }
 
-const S = { votes:[],
+const S = { votes:[], mdRaw:[], results:{},
   db:null, noDb:false, authUser:null, authChecked:false, denied:false, unsubs:[], readOnly:false, slow:false,
   config:null, matchdays:[], ledger:[],
   loaded:{config:false, md:false, lg:false},
@@ -494,6 +495,7 @@ const $ = id => document.getElementById(id);
 
 /* ---------- Berechnungen ---------- */
 function result(m){
+  if(m.status==="proposed") return {sa:0,sb:0,ga:0,gb:0,w:"d",played:false};
   let sa=0,sb=0,ga=0,gb=0,n=0;
   for(const s of (m.sets||[])){
     const a = Number(s?.a), b = Number(s?.b);
@@ -616,16 +618,16 @@ function balPill(b){
 }
 
 /* ---------- Ansichten ---------- */
-function alertCount(){ if(!isActive(S.member)) return 0; return S.requests.length + (isBankMe() ? pendingLed().length : 0); }
+function alertCount(){ if(!isActive(S.member)) return 0; return S.requests.length + (isBankMe() ? pendingLed().length : 0) + pendingResultsForMe().length; }
 function updateAlarm(){
   const el = $("alarm"); if(!el) return; const n = alertCount();
   el.hidden = !n; document.body.classList.toggle("has-alarm", !!n);
-  if(n){ const parts = []; if(S.requests.length) parts.push(S.requests.length===1?"Freigabe":"Freigaben"); if(isBankMe() && pendingLed().length) parts.push(pendingLed().length===1?"Zahlung":"Zahlungen");
+  if(n){ const parts = []; if(S.requests.length) parts.push(S.requests.length===1?"Freigabe":"Freigaben"); if(isBankMe() && pendingLed().length) parts.push(pendingLed().length===1?"Zahlung":"Zahlungen"); if(pendingResultsForMe().length) parts.push(pendingResultsForMe().length===1?"Ergebnis":"Ergebnisse");
     el.innerHTML = `<span aria-hidden="true">🔔</span><span>${parts.join(" & ")} bestätigen</span><span class="n">${n}</span>`; }
   if(S.modal==="alerts"){ if(n) renderModal(); else closeModal(); }
 }
 function modalAlerts(){
-  return { title:"Zu erledigen", html: (requestsCard() + confirmCard()) || `<div class="empty">Alles erledigt ✓</div>`, foot:"" };
+  return { title:"Zu erledigen", html: (resultsCard() + requestsCard() + confirmCard()) || `<div class="empty">Alles erledigt ✓</div>`, foot:"" };
 }
 function render(){
   S._elo = null;
@@ -855,6 +857,83 @@ async function savePollGuest(){
   if(ok){ closeModal(); toast(pname(gid)+" ist eingetragen"); }
 }
 
+/* ---------- Ergebnisse mit Bestätigung ----------
+   Ergebnisse liegen in "results" (ein Dokument pro Runde: <spieltag>__<runde>).
+   Status "proposed": von einem Team eingetragen, zählt noch nicht. "confirmed": vom anderen Team bestätigt, danach gesperrt.
+   Alte Ergebnisse direkt im Spieltag (ohne Status) gelten als bestätigt. */
+const resKey = (mdId, mId) => mdId + "__" + mId;
+function mergeResults(){
+  S.matchdays = S.mdRaw.map(md => ({...md, matches:(md.matches||[]).map(m => {
+    const r = S.results[resKey(md.id, m.id)];
+    if(r) return {...m, sets:r.sets||[], status:r.status, res:r};
+    const legacy = (m.sets||[]).some(s => s?.a!=null && s?.b!=null);
+    return {...m, status: legacy ? "confirmed" : null, legacy};
+  })}));
+}
+const deviceOf = pid => S.members.some(x => x.pid===pid && isActive(x));
+/* Wer darf bestätigen? Das andere Team; hat davon niemand ein freigegebenes Gerät, jeder Liga-Spieler außerhalb des eintragenden Teams */
+function confirmersFor(m){
+  const r = m.res; if(!r) return [];
+  if(r.side!=="a" && r.side!=="b") return players().map(p=>p.id).filter(id => id!==r.by && deviceOf(id));
+  const own = r.side==="a" ? (m.a||[]) : (m.b||[]); const other = r.side==="a" ? (m.b||[]) : (m.a||[]);
+  const withDev = other.filter(deviceOf);
+  return withDev.length ? withDev : players().map(p=>p.id).filter(id => !own.includes(id) && deviceOf(id));
+}
+function resRole(m){
+  const me = getMe(); if(!me || !canWrite()) return null;
+  if(m.status==="confirmed") return "locked";
+  if(m.status==="proposed"){
+    const own = m.res.side==="a" ? (m.a||[]) : m.res.side==="b" ? (m.b||[]) : [];
+    if(own.includes(me) || m.res.by===me) return "waiting";
+    if(confirmersFor(m).includes(me)) return "confirm";
+    return null;
+  }
+  if((m.a||[]).includes(me) || (m.b||[]).includes(me)) return "enter";
+  // niemand aus dem Match hat ein Gerät: dann darf jeder Liga-Spieler eintragen
+  if(![...(m.a||[]),...(m.b||[])].some(deviceOf) && players().some(p=>p.id===me)) return "enter";
+  return null;
+}
+function resActions(md, m){
+  const role = resRole(m); const r = m.res;
+  const btn = (act, label, cls="") => `<button class="btn sm ${cls}" data-act="${act}" data-md="${esc(md.id)}" data-mid="${esc(m.id)}">${label}</button>`;
+  if(m.status==="confirmed") return `<div class="resline"><span class="small muted">🔒 ${m.legacy ? "Ergebnis eingetragen" : `bestätigt von ${esc(pname(r?.confirmedBy))}`}</span></div>`;
+  if(m.status==="proposed") return `<div class="resline"><span class="small" style="color:var(--warn,#B7791F)">⏳ eingetragen von ${esc(pname(r.by))}, wartet auf Bestätigung durch das andere Team</span>
+    ${role==="confirm" ? `<div class="row">${btn("res-ok","Bestätigen ✓","primary")}${btn("res-no","Ablehnen","danger")}</div>` : role==="waiting" ? `<div class="row">${btn("res-no","Zurückziehen","ghost")}</div>` : ""}</div>`;
+  if(role==="enter" && md.date && md.date <= today()) return `<div class="resline">${btn("res-enter","Ergebnis eintragen","primary")}</div>`;
+  return "";
+}
+function pendingResultsForMe(){
+  const out = [];
+  for(const md of S.matchdays) (md.matches||[]).forEach((m,i) => { if(m.status==="proposed" && resRole(m)==="confirm") out.push({md, m, i}); });
+  return out;
+}
+function resultsCard(){
+  const L = pendingResultsForMe(); if(!L.length) return "";
+  const nums = mdNumbers();
+  return `<section class="card" style="display:grid;gap:10px;border-color:color-mix(in srgb,var(--primary) 45%,var(--line))">
+    <div class="row between"><h2 style="margin:0">Ergebnisse bestätigen</h2><span class="pill info">${L.length} offen</span></div>
+    <p class="muted small" style="margin:0">Stimmt das Ergebnis? Nach der Bestätigung ist es gesperrt und zählt für Tabelle und Elo.</p>
+    ${L.map(x => `<div style="display:grid;gap:6px;padding-top:10px;border-top:1px solid var(--line)">
+      <div class="small muted">Spieltag ${nums[x.md.id]} · ${esc(fmtDate(x.md.date))} · ${roundLabel(x.m,x.i)}</div>
+      <div class="rounds">${matchLine(x.m, x.i, null)}</div>
+      <div class="row"><button class="btn primary sm" data-act="res-ok" data-md="${esc(x.md.id)}" data-mid="${esc(x.m.id)}">Bestätigen ✓</button><button class="btn sm danger" data-act="res-no" data-md="${esc(x.md.id)}" data-mid="${esc(x.m.id)}">Ablehnen</button></div></div>`).join("")}
+  </section>`;
+}
+function modalRes(){
+  const d = S.draft; const md = S.matchdays.find(x=>x.id===d.md); const m = md?.matches.find(x=>x.id===d.mid);
+  if(!m) return {title:"Ergebnis", html:`<div class="empty">Runde nicht gefunden.</div>`, foot:""};
+  const i = md.matches.indexOf(m);
+  return { title:"Ergebnis eintragen", html:`
+    <div class="small muted">Spieltag ${mdNumbers()[md.id]} · ${esc(fmtDate(md.date))} · ${roundLabel(m,i)}</div>
+    <div class="teams" style="align-items:end">
+      <div class="field" style="text-align:center"><span class="pname">${(m.a||[]).map(nameHtml).join(" & ")}</span><input class="input" inputmode="numeric" maxlength="2" id="res-a" data-f="a" value="${esc(d.a)}" style="text-align:center;font-size:28px;font-weight:700;min-height:64px" aria-label="Spiele Team 1"></div>
+      <div class="vs" style="padding-bottom:20px">:</div>
+      <div class="field" style="text-align:center"><span class="pname">${(m.b||[]).map(nameHtml).join(" & ")}</span><input class="input" inputmode="numeric" maxlength="2" id="res-b" data-f="b" value="${esc(d.b)}" style="text-align:center;font-size:28px;font-weight:700;min-height:64px" aria-label="Spiele Team 2"></div>
+    </div>
+    <div class="notice small">Ein Spieler aus dem anderen Team muss das Ergebnis bestätigen. Danach ist es gesperrt und kann nicht mehr geändert werden.</div>`,
+    foot:`<span></span><button class="btn primary" data-act="res-save" id="btnResSave">Eintragen</button>` };
+}
+
 /* Erinnerung: Spieltag ist vorbei, aber Ergebnisse fehlen */
 function missingResults(){
   const now = new Date(); const nums = mdNumbers();
@@ -871,9 +950,9 @@ function missingCard(){
   const L = missingResults(); if(!L.length) return "";
   return `<section class="card" style="border:1.5px solid color-mix(in srgb,var(--bad) 45%,var(--line));background:var(--bad-bg);display:grid;gap:10px">
     <div class="row between"><h2 style="margin:0">Ergebnisse fehlen</h2><span class="pill bad">${L.length} ${L.length===1?"Spieltag":"Spieltage"}</span></div>
-    ${L.map(x => `<div class="row between" style="flex-wrap:nowrap"><div class="small"><b>Spieltag ${x.n}</b> · ${esc(fmtDate(x.md.date))}<br><span class="muted">${x.missing ? `${x.missing} ${x.missing===1?"Runde":"Runden"} ohne Ergebnis` : "Noch keine Runden eingetragen"}</span></div>
-      ${canWrite()?`<button class="btn primary sm" data-act="edit-md" data-id="${esc(x.md.id)}">Eintragen</button>`:""}</div>`).join("")}
-    <p class="note" style="margin:0">Leere Runden, die nicht gespielt wurden, kannst du beim Eintragen entfernen.</p>
+    ${L.map(x => `<div class="row between" style="flex-wrap:nowrap"><div class="small"><b>Spieltag ${x.n}</b> · ${esc(fmtDate(x.md.date))}<br><span class="muted">${x.missing ? `${x.missing} ${x.missing===1?"Runde":"Runden"} ohne bestätigtes Ergebnis` : "Noch keine Runden eingetragen"}</span></div>
+      ${canWrite()?`<button class="btn primary sm" data-act="nav" data-view="spieltage">Ansehen</button>`:""}</div>`).join("")}
+    <p class="note" style="margin:0">Ergebnisse trägt ein Spieler aus dem Match direkt in der Spieltagskarte ein, das andere Team bestätigt. Runden, die nicht gespielt wurden, kannst du über „Bearbeiten“ entfernen.</p>
   </section>`;
 }
 /* Vorschau unter „Spieltage“ */
@@ -1020,17 +1099,19 @@ function guestTable(){
     <div class="tablewrap"><table><thead><tr><th class="l">Gast</th><th title="Spieltage dabei">Tage</th><th title="Matches">Sp</th><th title="Siege : Niederlagen">S:N</th><th>Quote</th><th title="Spieldifferenz pro Match">± / Sp</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
     <p class="note">Spiele mit Gästen zählen für die Liga-Spieler ganz normal.</p></section>`;
 }
-function matchLine(m, i){
+function matchLine(m, i, md){
   const r = result(m);
   const ta = (m.a||[]).map(nameHtml).join(" / "), tb = (m.b||[]).map(nameHtml).join(" / ");
   const sets = (m.sets||[]).filter(s => s?.a!=null && s?.b!=null);
   const wp = !r.played ? winProb(m) : null;
-  const score = !r.played ? (wp!=null ? `<span class="score" title="Siegchance laut Elo" style="font-weight:700;color:var(--ink-2)">${wp} : ${100-wp}<small>% Chance</small></span>` : `<span class="score" style="font-weight:600;color:var(--muted)">offen</span>`)
+  const prop = m.status==="proposed" ? (m.sets||[]).filter(s => s?.a!=null && s?.b!=null) : null;
+  const score = prop && prop.length ? `<span class="score" style="border-style:dashed;color:var(--ink-2)">${prop.map(s=>`${s.a} : ${s.b}`).join(" ")}<small>⏳ offen</small></span>`
+    : !r.played ? (wp!=null ? `<span class="score" title="Siegchance laut Elo" style="font-weight:700;color:var(--ink-2)">${wp} : ${100-wp}<small>% Chance</small></span>` : `<span class="score" style="font-weight:600;color:var(--muted)">offen</span>`)
     : sets.length===1 ? `<span class="score">${sets[0].a} : ${sets[0].b}</span>`
     : `<span class="score">${r.sa} : ${r.sb}<small>${sets.map(s=>`${s.a}:${s.b}`).join(" ")}</small></span>`;
   return `<div class="rnd ${m.extra?"extra":""}"><span class="rl" title="${roundLabel(m,i)}">${m.extra?"EX":"R"+(i+1)}</span><div class="match"><div class="ta ${r.played&&r.w==="a"?"win":""}">${ta}</div>
     ${score}
-    <div class="tb ${r.played&&r.w==="b"?"win":""}">${tb}</div></div></div>`;
+    <div class="tb ${r.played&&r.w==="b"?"win":""}">${tb}</div></div>${md ? resActions(md, m) : ""}</div>`;
 }
 function dayLine(md){
   const dr = dayRanking(md); if(!dr.winners.length) return "";
@@ -1056,7 +1137,7 @@ function viewMatchdays(){
         ${canWrite()?`<button class="iconbtn" data-act="edit-md" data-id="${esc(md.id)}" aria-label="Spieltag ${nums[md.id]} bearbeiten" title="Bearbeiten">${ICON.edit}</button>`:""}
       </div>
       <div class="row">${winners.length?`<span class="pill ball">Tagessieg: ${winners.map(id=>esc(pname(id))).join(" & ")}</span>`:""}${payPill}</div>
-      ${(md.matches||[]).length ? `<div class="rounds">${(md.matches||[]).map((m,i)=>matchLine(m,i)).join("")}</div>` : `<div class="muted small">Noch keine Matches eingetragen.</div>`}
+      ${(md.matches||[]).length ? `<div class="rounds">${(md.matches||[]).map((m,i)=>matchLine(m,i,md)).join("")}</div>` : `<div class="muted small">Noch keine Matches eingetragen.</div>`}
       ${dayLine(md)}
       ${md.note?`<div class="muted small">${esc(md.note)}</div>`:""}
     </section>`;
@@ -1157,6 +1238,7 @@ const PUSH_TYPES = [
   ["moveup","↑ Ich bin von der Warteliste nachgerückt"],
   ["reminder","⏰ Erinnerung 1 Stunde vor dem Spiel"],
   ["missing","📝 Ergebnisse fehlen noch"],
+  ["resconf","🎾 Ergebnis wartet auf meine Bestätigung"],
   ["confirm","💶 Zahlung wartet auf meine Bestätigung"],
   ["devices","📱 Neues Gerät möchte beitreten"]
 ];
@@ -1627,7 +1709,7 @@ function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = tru
 function renderModal(first){
   S._elo = null;
   const body = $("sheetBody"); const top = body.scrollTop;
-  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed, alerts:modalAlerts}[S.modal];
+  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed, alerts:modalAlerts, res:modalRes}[S.modal];
   if(!fn) return;
   const {title, html, foot} = fn();
   $("sheetTitle").textContent = title; body.innerHTML = html; $("sheetFoot").innerHTML = foot;
@@ -1641,15 +1723,13 @@ function modalMd(){
   const share = num(d.courtCost) > 0 && d.participants.length ? num(d.courtCost)/d.participants.length : 0;
   const four = d.participants.length===4;
   const matches = d.matches.map((m,i) => `<div class="medit">
-    <div class="row between"><span class="lbl">${roundLabel(m,i)}</span><button class="btn sm" data-act="md-del-match" data-i="${i}">Entfernen</button></div>
+    <div class="row between"><span class="lbl">${roundLabel(m,i)}</span>${m.status ? `<span class="small muted">${m.status==="confirmed"?"🔒 Ergebnis bestätigt":"⏳ Ergebnis wartet auf Bestätigung"}</span>` : `<button class="btn sm" data-act="md-del-match" data-i="${i}">Entfernen</button>`}</div>
     <div class="teams">
-      <div class="team"><select class="input" id="m${i}a0" data-mf="${i}:a:0" aria-label="Team A Spieler 1">${playerOpts(m.a[0],pool)}</select><select class="input" id="m${i}a1" data-mf="${i}:a:1" aria-label="Team A Spieler 2">${playerOpts(m.a[1],pool)}</select></div>
+      <div class="team"><select class="input" id="m${i}a0" data-mf="${i}:a:0" ${m.status?"disabled":""} aria-label="Team A Spieler 1">${playerOpts(m.a[0],pool)}</select><select class="input" id="m${i}a1" data-mf="${i}:a:1" ${m.status?"disabled":""} aria-label="Team A Spieler 2">${playerOpts(m.a[1],pool)}</select></div>
       <div class="vs">vs</div>
-      <div class="team"><select class="input" id="m${i}b0" data-mf="${i}:b:0" aria-label="Team B Spieler 1">${playerOpts(m.b[0],pool)}</select><select class="input" id="m${i}b1" data-mf="${i}:b:1" aria-label="Team B Spieler 2">${playerOpts(m.b[1],pool)}</select></div>
+      <div class="team"><select class="input" id="m${i}b0" data-mf="${i}:b:0" ${m.status?"disabled":""} aria-label="Team B Spieler 1">${playerOpts(m.b[0],pool)}</select><select class="input" id="m${i}b1" data-mf="${i}:b:1" ${m.status?"disabled":""} aria-label="Team B Spieler 2">${playerOpts(m.b[1],pool)}</select></div>
     </div>
-    <div class="sets">${m.sets.map((s,j) => `<div class="set"><span>${m.sets.length>1?`Satz ${j+1}`:"Ergebnis"}</span>
-      <input class="input" inputmode="numeric" maxlength="2" id="m${i}s${j}a" data-sf="${i}:${j}:a" value="${s.a??""}" aria-label="Match ${i+1} Satz ${j+1} Team A">
-      <b>:</b><input class="input" inputmode="numeric" maxlength="2" id="m${i}s${j}b" data-sf="${i}:${j}:b" value="${s.b??""}" aria-label="Match ${i+1} Satz ${j+1} Team B"></div>`).join("")}</div>
+    <div class="small ${m.status?"":"muted"}">${m.status ? `Ergebnis: <b>${(m.sets||[]).filter(s=>s?.a!=null).map(s=>s.a+" : "+s.b).join(" ")}</b>` : "Das Ergebnis trägt ein Spieler aus dem Match in der Spieltagskarte ein."}</div>
   </div>`).join("");
   const armed = S.armed === "md";
   return {
@@ -1793,7 +1873,7 @@ function extraRound(parts){
   const flip = Math.random()<.5; const sh = t => Math.random()<.5 ? [t[1],t[0]] : [...t];
   return {id:uid(), extra:true, a:sh(flip?x.b:x.a), b:sh(flip?x.a:x.b), sets:emptySets()};
 }
-const hasScore = m => (m.sets||[]).some(s => s.a!=null || s.b!=null);
+const hasScore = m => !!m.status;
 const emptySets = () => [{a:null,b:null}];
 
 /* ---------- Speichern ---------- */
@@ -1821,11 +1901,12 @@ function cleanMatches(d){
   const out = [];
   for(const [i,m] of d.matches.entries()){
     const four = [...m.a,...m.b];
-    const empty = four.every(x=>!x) && m.sets.every(s=>s.a==null&&s.b==null);
+    const empty = four.every(x=>!x) && !m.status;
     if(empty) continue;
     if(four.some(x=>!x)) return {err:`Match ${i+1}: Bitte alle vier Spieler wählen.`};
     if(new Set(four).size!==4) return {err:`Match ${i+1}: Ein Spieler ist doppelt eingetragen.`};
-    out.push({id:m.id||uid(), extra:!!m.extra, a:[...m.a], b:[...m.b], sets:m.sets.filter(s=>s.a!=null&&s.b!=null).map(s=>({a:s.a,b:s.b}))});
+    const raw = S.mdRaw.find(x=>x.id===d.id)?.matches?.find(x=>x.id===m.id);
+    out.push({id:m.id||uid(), extra:!!m.extra, a:[...m.a], b:[...m.b], sets: raw?.sets ? raw.sets.map(s=>({a:s.a,b:s.b})) : []});
   }
   return {matches:out};
 }
@@ -1898,6 +1979,19 @@ document.addEventListener("click", e => {
     case "push-test": guarded(async () => { const ok = await write(() => DB.doc("members/"+S.uid).update({pushTest: true})); if(ok) toast("Test angefordert. Er kommt in den nächsten Minuten."); }); break;
     case "push-off": guarded(async () => { const ok = await write(() => DB.doc("members/"+S.uid).update({pushToken: null})); if(ok) toast("Benachrichtigungen auf diesem Gerät aus"); }); break;
     case "alerts": openModal("alerts", {}); break;
+    case "res-enter": openModal("res", {md: el.dataset.md, mid: el.dataset.mid, a:"", b:""}); break;
+    case "res-save": {
+      const a = parseInt(d.a,10), b = parseInt(d.b,10);
+      if(!(a>=0 && a<=9 && b>=0 && b<=9)){ toast("Bitte für beide Teams die gewonnenen Spiele eintragen (0–9)."); break; }
+      const md = S.matchdays.find(x=>x.id===d.md); const m = md?.matches.find(x=>x.id===d.mid); if(!m) break;
+      if(m.status){ toast("Für diese Runde ist schon ein Ergebnis eingetragen."); break; }
+      const me = getMe(); const side = (m.a||[]).includes(me) ? "a" : (m.b||[]).includes(me) ? "b" : "x";
+      guarded(async () => { const ok = await write(() => S.db.doc("results/"+resKey(d.md, d.mid)).set({md:d.md, match:d.mid, sets:[{a,b}], status:"proposed", by:me, side, at:Date.now()}));
+        if(ok){ closeModal(); toast("Eingetragen · das andere Team muss bestätigen"); } }); break; }
+    case "res-ok": { const k = resKey(el.dataset.md, el.dataset.mid);
+      guarded(async () => { const ok = await write(() => S.db.doc("results/"+k).update({status:"confirmed", confirmedBy:getMe(), confirmedAt:Date.now()})); if(ok) toast("Ergebnis bestätigt 🔒"); }); break; }
+    case "res-no": { const k = resKey(el.dataset.md, el.dataset.mid);
+      guarded(async () => { const ok = await write(() => S.db.doc("results/"+k).delete()); if(ok) toast("Ergebnis entfernt"); }); break; }
     case "acc-toggle": S.accOpen = {...(S.accOpen||{}), [el.dataset.k]: !(S.accOpen||{})[el.dataset.k]}; render(); break;
     case "acc": S.openAcc = S.openAcc===id ? null : id; render(); break;
     case "cash-more": S.cashMore = !S.cashMore; render(); break;
@@ -1979,7 +2073,7 @@ document.addEventListener("click", e => {
       const md = S.matchdays.find(m=>m.id===id); if(!md) return;
       const sets3 = s => { const arr = (s||[]).map(x=>({a:x.a??null,b:x.b??null})); if(!arr.length) arr.push({a:null,b:null}); return arr; };
       openModal("md", {isNew:false, id:md.id, createdAt:md.createdAt, date:md.date||"", location:md.location||"", courtCost:md.courtCost!=null?String(md.courtCost):"", participants:[...(md.participants||[])],
-        matches:(md.matches||[]).map(m=>({id:m.id||uid(), extra:!!m.extra, a:[m.a?.[0]||"",m.a?.[1]||""], b:[m.b?.[0]||"",m.b?.[1]||""], sets:sets3(m.sets)})), paid:{...(md.paid||{})}, note:md.note||"", newGuests:[], guestName:""});
+        matches:(md.matches||[]).map(m=>({id:m.id||uid(), extra:!!m.extra, a:[m.a?.[0]||"",m.a?.[1]||""], b:[m.b?.[0]||"",m.b?.[1]||""], sets:sets3(m.sets), status:m.status||null})), paid:{...(md.paid||{})}, note:md.note||"", newGuests:[], guestName:""});
       break; }
     case "md-part": {
       const i = d.participants.indexOf(id); if(i>=0) d.participants.splice(i,1); else d.participants.push(id);
@@ -2002,11 +2096,12 @@ document.addEventListener("click", e => {
         if(d.participants.length===4 && !d.matches.some(hasScore)) d.matches = standardRounds(d.participants);
       }
       renderModal(); break; }
-    case "md-std": d.matches = standardRounds(d.participants).concat(d.matches.filter(m=>m.extra)); renderModal(); break;
+    case "md-std": if(d.matches.some(m=>m.status)){ toast("Es gibt schon Ergebnisse, Runden lassen sich nicht neu anlegen."); break; } d.matches = standardRounds(d.participants).concat(d.matches.filter(m=>m.extra)); renderModal(); break;
     case "md-extra": d.matches.push(extraRound(d.participants)); renderModal(); toast("Extra-Runde ausgelost"); break;
-    case "md-del-match": d.matches.splice(+el.dataset.i,1); renderModal(); break;
+    case "md-del-match": if(d.matches[+el.dataset.i]?.status){ toast("Runden mit Ergebnis können nicht entfernt werden."); break; } d.matches.splice(+el.dataset.i,1); renderModal(); break;
     case "md-save": guarded(saveMd); break;
     case "md-delete":
+      if(d.matches.some(m=>m.status==="confirmed")){ toast("Spieltage mit bestätigten Ergebnissen können nicht gelöscht werden."); break; }
       if(S.armed!=="md"){ S.armed="md"; renderModal(); break; }
       guarded(async()=>{ const ok = await write(()=>S.db.doc("matchdays/"+d.id).delete()); if(ok){ closeModal(); toast("Spieltag gelöscht"); } });
       break;
@@ -2099,7 +2194,7 @@ const deviceLabel = () => { const u = navigator.userAgent; const t = /iPhone/.te
   const app = (window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone) ? " · Homescreen-App" : " · Browser"; return t + app; };
 function isActive(m){ return !!m && m.active !== false; }
 let adminUnsubs = [];
-function stopData(){ S.unsubs.forEach(f => f()); S.unsubs = []; adminUnsubs.forEach(f => f()); adminUnsubs = []; S.db = null; S.config = null; S.matchdays = []; S.ledger = []; S.votes = []; S.members = []; S.requests = []; }
+function stopData(){ S.unsubs.forEach(f => f()); S.unsubs = []; adminUnsubs.forEach(f => f()); adminUnsubs = []; S.db = null; S.config = null; S.matchdays = []; S.mdRaw = []; S.results = {}; S.ledger = []; S.votes = []; S.members = []; S.requests = []; }
 function watchAccess(uid){
   accessUnsubs.forEach(f => f()); accessUnsubs = [];
   S.memberChecked = false;
@@ -2189,7 +2284,8 @@ function subscribe(){
   const onErr = e => { clearTimeout(slowT); S.loaded = {config:true, md:true, lg:true}; if(e?.code==="permission-denied") S.denied = true; else toast("Verbindung zur Datenbank unterbrochen. Seite später neu öffnen."); render(); };
   S.unsubs = [
     DB.doc("league/config").onSnapshot(s => { S.config = s.exists ? s.data() : null; S.loaded.config = true; if(!s.metadata.fromCache){ fresh.config = true; fixNames(); } done(); render(); }, onErr),
-    DB.collection("matchdays").onSnapshot(q => { S.matchdays = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.md = true; if(!q.metadata.fromCache) fresh.md = true; done(); render(); }, onErr),
+    DB.collection("results").onSnapshot(q => { S.results = Object.fromEntries(q.docs.map(x => [x.id, {...x.data(), id:x.id}])); mergeResults(); render(); }, () => {}),
+    DB.collection("matchdays").onSnapshot(q => { S.mdRaw = q.docs.map(x => ({...x.data(), id:x.id})); mergeResults(); S.loaded.md = true; if(!q.metadata.fromCache) fresh.md = true; done(); render(); }, onErr),
     DB.collection("ledger").onSnapshot(q => { S.ledger = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.lg = true; if(!q.metadata.fromCache) fresh.lg = true; done(); render(); }, onErr),
     DB.collection("votes").onSnapshot(q => { S.votes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {})
   ];
