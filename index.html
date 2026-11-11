@@ -333,7 +333,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.24";
+const APP_VERSION = "2026-11-11.25";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -484,7 +484,7 @@ function finance(){
     }
   }
   for(const e of S.ledger){
-    if(e.status==="pending") continue;
+    if(e.status==="pending" || e.status==="deleted") continue;
     const amt = num(e.amount);
     if(e.type==="cost"){
       const ps = (e.players||[]).filter(id => f[id]);
@@ -1087,6 +1087,25 @@ function paymentDoc(payer, amt, note, date){
     ? {type:"transfer", from:payer, to:b, amount:amt, date:date||today(), note:note||"", createdAt:Date.now(), status: getMe()===b ? "confirmed" : "pending", by:getMe()||null}
     : {type:"payment", playerId:payer, amount:amt, date:date||today(), note:note||"", createdAt:Date.now()};
 }
+/* Wer darf was an einer Buchung? Nur Daniel (Kasse) löscht, mit Grund, nur 24 h; unbestätigte eigene Zahlung darf man zurückziehen */
+const isBankMe = () => !!bank() && getMe()===bank();
+function ledAction(e){
+  if(!canWrite() || e.status==="deleted") return "";
+  const me = getMe();
+  if(e.status==="pending" && e.from===me) return `<button class="btn sm ghost" style="color:var(--muted)" data-act="led-withdraw" data-id="${esc(e.id)}">Zurückziehen</button>`;
+  if(e.status==="pending") return "";
+  if(isBankMe() && ledEditable(e)) return `<button class="btn sm ghost" style="color:var(--muted)" data-act="del-led" data-id="${esc(e.id)}" title="Löschbar bis ${esc(ledUntil(e))}">Löschen</button>`;
+  return ledEditable(e) ? "" : `<span class="small muted" title="Buchungen sind nach 24 Stunden gesperrt">🔒</span>`;
+}
+function modalDelLed(){
+  const d = S.draft; const e = S.ledger.find(x=>x.id===d.id) || {};
+  const title = e.type==="cost" ? (e.title||"Kosten") : e.type==="transfer" ? `${pname(e.from)} → ${pname(e.to)}` : pname(e.playerId);
+  return { title:"Buchung löschen", html:`
+    <div class="card" style="padding:14px"><div class="pname">${esc(title)}</div><div class="small muted">${eur.format(num(e.amount))} · ${esc(fmtDate(e.date))}${e.note?" · "+esc(e.note):""}</div></div>
+    <div class="field"><label for="dl-reason">Grund (Pflicht)</label><input class="input" id="dl-reason" data-f="reason" value="${esc(d.reason)}" placeholder="z. B. doppelt eingetragen" maxlength="120"></div>
+    <p class="note" style="margin:0">Die Buchung zählt danach nicht mehr, bleibt aber durchgestrichen mit Grund in der Liste sichtbar.</p>`,
+    foot:`<span></span><button class="btn danger armed" data-act="del-led-ok" id="btnDelLedOk">Endgültig löschen</button>` };
+}
 const pendingLed = () => S.ledger.filter(e => e.status==="pending").sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
 const pendingFrom = id => pendingLed().filter(e => e.from===id).reduce((s,e)=>s+num(e.amount),0);
 function confirmCard(){
@@ -1165,13 +1184,15 @@ function viewCash(){
   const ledHtml = led.map(e => {
     const isCost = e.type==="cost", isTr = e.type==="transfer";
     const title = isCost ? `${esc(e.title||"Kosten")}` : isTr ? `${nameHtml(e.from)} → ${nameHtml(e.to)}` : `${nameHtml(e.playerId)}`;
-    const kind = (e.status==="pending" ? `<span class="pill neutral" style="padding:1px 7px">⏳ unbestätigt</span> ` : "") + (isCost ? `geteilt durch ${(e.players||[]).length}` : isTr ? (/PayPal/.test(e.note||"") ? (/Aufladung/.test(e.note)?"Aufladung per PayPal":"PayPal-Zahlung") : "Zahlung") : (e.playerId===bank() ? "Vorschuss" : "Einzahlung"));
+    const del = e.status==="deleted";
+    const kind = (del ? `<span class="pill bad" style="padding:1px 7px">gelöscht</span> ` : e.status==="pending" ? `<span class="pill neutral" style="padding:1px 7px">⏳ unbestätigt</span> ` : "") + (isCost ? `geteilt durch ${(e.players||[]).length}` : isTr ? (/PayPal/.test(e.note||"") ? (/Aufladung/.test(e.note)?"Aufladung per PayPal":"PayPal-Zahlung") : "Zahlung") : (e.playerId===bank() ? "Vorschuss" : "Einzahlung"));
     const armed = S.armed === "led:"+e.id;
     const mo = e.date ? new Date(e.date+"T12:00:00").toLocaleDateString("de-DE",{month:"long",year:"numeric"}) : "";
     const head = mo !== lastMonth ? (lastMonth = mo, `<div class="lbl" style="padding:12px 0 2px">${esc(mo)}</div>`) : "";
-    return head + `<div class="li"><div class="who"><span class="tico ${isCost?"cost":isTr?"tr":"pay"}">${isCost?"−":isTr?"⇄":"+"}</span><div style="min-width:0"><div class="pname">${title}</div><div class="meta">${kind} · ${esc(fmtDate(e.date))}${e.note && !/PayPal/.test(e.note)?" · "+esc(e.note):""}</div></div></div>
-      <div class="amt"><span class="amt-v" style="color:${isTr?"var(--info)":isCost?"var(--bad)":"var(--good)"}">${isCost?"−":isTr?"":"+"}${eur.format(num(e.amount))}</span>
-      ${canWrite() && ledEditable(e) ? `<button class="btn sm ${armed?"danger armed":"ghost"}" style="${armed?"":"color:var(--muted)"}" data-act="del-led" data-id="${esc(e.id)}" title="Änderbar bis ${esc(ledUntil(e))}">${armed?"Wirklich löschen?":"Löschen · bis "+esc(ledUntil(e))}</button>` : `<span class="small muted" title="Buchungen sind nach 24 Stunden gesperrt">🔒 gesperrt</span>`}</div></div>`;
+    return head + `<div class="li" style="${del?"opacity:.6":""}"><div class="who"><span class="tico ${isCost?"cost":isTr?"tr":"pay"}">${isCost?"−":isTr?"⇄":"+"}</span><div style="min-width:0"><div class="pname">${title}</div><div class="meta">${kind} · ${esc(fmtDate(e.date))}${e.note && !/PayPal/.test(e.note)?" · "+esc(e.note):""}</div>
+        ${del ? `<div class="meta">von ${esc(pname(e.deletedBy))} am ${esc(new Date(e.deletedAt||0).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}))}: „${esc(e.deleteReason||"")}“</div>` : ""}</div></div>
+      <div class="amt"><span class="amt-v" style="${del?"text-decoration:line-through;":""}color:${isTr?"var(--info)":isCost?"var(--bad)":"var(--good)"}">${isCost?"−":isTr?"":"+"}${eur.format(num(e.amount))}</span>
+      ${ledAction(e)}</div></div>`;
   }).join("");
   const fchip = (k,l) => `<button class="chip" style="padding:5px 11px;font-size:13px" data-act="led-filter" data-k="${k}" aria-pressed="${flt===k}">${l}</button>`;
 
@@ -1189,7 +1210,7 @@ function viewCash(){
   </div>` : ""}
   <section class="card"><div class="card-head"><h2>Kontostand</h2><span class="small muted">Antippen für Details</span></div>
     <div>${rows}</div>
-    <p class="note">Platzkosten werden gleichmäßig auf die Teilnehmer verteilt und mit Guthaben verrechnet. Buchungen lassen sich nur in den ersten 24 Stunden löschen.${cashier()?` Gäste zahlen an ${esc(pname(cashier()))}.`:""}</p></section>
+    <p class="note">Platzkosten werden gleichmäßig auf die Teilnehmer verteilt und mit Guthaben verrechnet. Löschen kann nur ${bank()?esc(pname(bank())):"der Kassenwart"}, innerhalb von 24 Stunden und mit Grund.${cashier()?` Gäste zahlen an ${esc(pname(cashier()))}.`:""}</p></section>
   <section class="card"><div class="card-head"><h2>Buchungen</h2><span class="small muted">${ledAll.length}</span></div>
     <div class="chips" style="margin-bottom:4px">${fchip("all","Alle")}${fchip("payment","Zahlungen")}${fchip("cost","Kosten")}</div>
     ${ledHtml ? `<div class="list">${ledHtml}</div>` : `<div class="muted small" style="padding-top:8px">Keine Einträge.</div>`}
@@ -1456,7 +1477,7 @@ function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = tru
 function renderModal(first){
   S._elo = null;
   const body = $("sheetBody"); const top = body.scrollTop;
-  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal}[S.modal];
+  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed}[S.modal];
   if(!fn) return;
   const {title, html, foot} = fn();
   $("sheetTitle").textContent = title; body.innerHTML = html; $("sheetFoot").innerHTML = foot;
@@ -1707,7 +1728,7 @@ async function saveCost(){
   const d = S.draft; const amt = r2(num(d.amount));
   if(!(amt>0)){ toast("Bitte einen Betrag über 0 € eingeben."); return; }
   if(!d.players.length){ toast("Bitte mindestens einen Spieler wählen."); return; }
-  const ok = await write(() => S.db.collection("ledger").doc(d.id).set({type:"cost", title:(d.title||"").trim()||"Kosten", amount:amt, date:d.date||today(), players:[...d.players], createdAt:Date.now()}));
+  const ok = await write(() => S.db.collection("ledger").doc(d.id).set({type:"cost", title:(d.title||"").trim()||"Kosten", amount:amt, date:d.date||today(), players:[...d.players], createdAt:Date.now(), by:getMe()||null}));
   if(ok){ closeModal(); toast("Kosten gespeichert"); }
 }
 
@@ -1871,12 +1892,16 @@ document.addEventListener("click", e => {
           : await write(()=>S.db.doc("matchdays/"+mdId).update({paid:{[id]:true}, updatedAt:Date.now()}));
         if(ok) toast(b && payer!==b && getMe()!==b ? `Eingetragen · wartet auf Bestätigung durch ${pname(b)}` : `${pname(id)} als bezahlt markiert`); });
       break; }
-    case "del-led":
-      if(!ledEditable(S.ledger.find(x=>x.id===id)||{})){ toast("Buchungen lassen sich nur 24 Stunden lang ändern."); break; }
-      if(S.armed!=="led:"+id){ S.armed="led:"+id; render(); break; }
-      S.armed = null;
-      guarded(async()=>{ const ok = await write(()=>S.db.collection("ledger").doc(id).delete()); if(ok) toast("Eintrag gelöscht"); });
-      break;
+    case "del-led": {
+      const e = S.ledger.find(x=>x.id===id) || {};
+      if(!isBankMe()){ toast(`Buchungen kann nur ${bank()?pname(bank()):"der Kassenwart"} löschen.`); break; }
+      if(!ledEditable(e)){ toast("Buchungen lassen sich nur 24 Stunden lang löschen."); break; }
+      openModal("delled", {id, reason:""}); break; }
+    case "del-led-ok": {
+      const reason = (d.reason||"").trim(); if(reason.length < 3){ toast("Bitte einen Grund angeben."); break; }
+      guarded(async()=>{ const ok = await write(()=>S.db.collection("ledger").doc(d.id).update({status:"deleted", deletedBy:getMe(), deletedAt:Date.now(), deleteReason:reason}));
+        if(ok){ closeModal(); toast("Buchung gelöscht"); } }); break; }
+    case "led-withdraw": guarded(async()=>{ const ok = await write(()=>S.db.collection("ledger").doc(id).delete()); if(ok) toast("Zahlung zurückgezogen"); }); break;
   }
 });
 document.addEventListener("input", e => {
