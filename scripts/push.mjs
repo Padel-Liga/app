@@ -55,7 +55,7 @@ async function all(coll){ const q = await db.collection(`${base}/${coll}`).get()
 const cfgSnap = await db.doc(`${base}/league/config`).get();
 if(!cfgSnap.exists){ console.log("Keine Liga-Konfiguration."); process.exit(0); }
 const cfg = cfgSnap.data();
-const [members, votes, matchdays, ledger, requests, results] = await Promise.all(["members","votes","matchdays","ledger","requests","results"].map(all));
+const [members, votes, matchdays, ledger, requests, results, broadcasts] = await Promise.all(["members","votes","matchdays","ledger","requests","results","broadcasts"].map(all));
 const resById = Object.fromEntries(results.map(r => [r.id, r]));
 const stateRef = db.doc(`${base}/system/push`);
 const state = (await stateRef.get()).data() || {};
@@ -141,6 +141,13 @@ for(const e of ledger.filter(e => e.status==="pending"))
 // 7) Neues Gerät
 for(const r of requests)
   queue(`req:${r.id}`, "📱 Neues Gerät", `${r.name || "Jemand"} möchte der Liga beitreten.`, forType("devices"));
+// Mitteilungen von Michael
+const ADMIN_PIDS = ["teryeoc8"];
+for(const b of broadcasts.filter(b => b.status==="queued" && ADMIN_PIDS.includes(b.by))){
+  const toOk = m => b.to==="all" ? true : b.to==="players" ? players.some(p=>p.id===m.pid) : Array.isArray(b.to) && b.to.includes(m.pid);
+  const rec = forType("news", m => toOk(m) && m.pid !== b.by);
+  outbox.push({key:`bc:${b.id}`, title: "📣 " + (b.title || `Nachricht von ${pname(b.by)}`), body: b.body, to: rec, broadcast: b.id});
+}
 // Test-Nachrichten
 const tests = members.filter(m => m.pushTest && m.pushToken && m.active !== false);
 for(const m of tests) outbox.push({key:null, title:"🔔 Test", body:"Push-Benachrichtigungen funktionieren!", to:[m], test:true});
@@ -151,7 +158,7 @@ for(const msg of outbox){
   const tokens = [...new Set(msg.to.map(m => m.pushToken))];
   console.log("Sende:", msg.key || "test", "|", msg.title, "→", msg.to.map(m=>m.name||m.pid).join(", "));
   if(DRY){ console.log("[DRY]", msg.key, msg.title, "|", msg.body, "→", msg.to.map(m=>m.name||m.pid).join(", ")); }
-  else {
+  else if(tokens.length) {
     const res = await admin.messaging().sendEachForMulticast({
       tokens,
       notification: { title: msg.title, body: msg.body },
@@ -168,6 +175,7 @@ for(const msg of outbox){
   }
   if(msg.key) sent[msg.key] = Date.now();
   if(msg.test && !DRY) for(const m of msg.to) await db.doc(`${base}/members/${m.id}`).update({pushTest: false});
+  if(msg.broadcast && !DRY) await db.doc(`${base}/broadcasts/${msg.broadcast}`).update({status:"sent", sentAt: Date.now(), count: msg.to.length});
 }
 // alte Einträge (älter als 45 Tage) aufräumen
 for(const k of Object.keys(sent)) if(Date.now() - sent[k] > 45*86400000) delete sent[k];

@@ -431,7 +431,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.32";
+const APP_VERSION = "2026-11-11.33";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -461,7 +461,7 @@ async function importAll(obj){
   await b.commit(); return n;
 }
 
-const S = { votes:[], mdRaw:[], results:{},
+const S = { broadcasts:[], votes:[], mdRaw:[], results:{},
   db:null, noDb:false, authUser:null, authChecked:false, denied:false, unsubs:[], readOnly:false, slow:false,
   config:null, matchdays:[], ledger:[],
   loaded:{config:false, md:false, lg:false},
@@ -1026,6 +1026,39 @@ const ICON = {
   chev:'<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'
 };
 
+/* ---------- Mitteilungen von Michael (Admin) ---------- */
+const ADMIN_PIDS = ["teryeoc8"];   // Michael
+const isAdmin = () => ADMIN_PIDS.includes(getMe());
+const recentBroadcasts = () => S.broadcasts.filter(b => Date.now() - (b.at||0) < 3*86400000 && (b.to==="all" || (Array.isArray(b.to) && b.to.includes(getMe())) || ADMIN_PIDS.includes(getMe()))).sort((a,b)=>(b.at||0)-(a.at||0));
+function broadcastCards(){
+  const L = recentBroadcasts().slice(0,2); if(!L.length) return "";
+  return L.map(b => `<section class="card" style="border-left:4px solid var(--ball);display:grid;gap:6px">
+    <div class="row between"><span class="lbl">📣 Mitteilung von ${esc(pname(b.by))}</span><span class="small muted">${esc(new Date(b.at||0).toLocaleString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}))}</span></div>
+    ${b.title ? `<div class="pname" style="font-size:16px">${esc(b.title)}</div>` : ""}
+    <div style="white-space:pre-line">${esc(b.body)}</div></section>`).join("");
+}
+function broadcastSection(){
+  if(!isAdmin()) return "";
+  const hist = [...S.broadcasts].sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,5);
+  const content = `<p class="muted small" style="margin:0 0 10px">Schreibe eine eigene Nachricht. Sie geht als Push an alle mit aktivierten Benachrichtigungen und steht 3 Tage lang auf der Home-Seite.</p>
+    <button class="btn primary" data-act="bc-new" id="btnBcNew">📣 Neue Nachricht schreiben</button>
+    ${hist.length ? `<div class="lbl" style="margin:14px 0 2px">Zuletzt gesendet</div><div class="list">${hist.map(b => `<div class="li"><div style="min-width:0"><div class="pname">${esc(b.title || b.body.slice(0,40))}</div>
+      <div class="meta">${esc(new Date(b.at||0).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}))} · an ${b.to==="all" ? "alle" : b.to==="players" ? "Liga-Spieler" : (b.to||[]).length + " Personen"}</div></div>
+      <span class="pill ${b.status==="sent"?"good":"neutral"}">${b.status==="sent" ? `gesendet${b.count!=null?" · "+b.count:""}` : "wird gesendet …"}</span></div>`).join("")}</div>` : ""}`;
+  return accSection("bc","📣","Nachricht an alle", "Push an die Liga schicken", "", content);
+}
+function modalBc(){
+  const d = S.draft; const ids = [...players(), ...guests()].map(p=>p.id);
+  return { title:"Nachricht an alle", html:`
+    <div class="field"><label for="bc-title">Überschrift (optional)</label><input class="input" id="bc-title" data-f="title" value="${esc(d.title)}" maxlength="60" placeholder="z. B. Platz geändert"></div>
+    <div class="field"><label for="bc-body">Nachricht</label><textarea class="input" id="bc-body" data-f="body" maxlength="300" style="min-height:110px;font-family:var(--font);font-size:15px" placeholder="z. B. Donnerstag spielen wir ausnahmsweise auf Platz 3.">${esc(d.body)}</textarea></div>
+    <div class="field"><span class="lbl">Empfänger</span><div class="chips">
+      ${[["all","Alle"],["players","Nur Liga-Spieler"],["pick","Auswählen"]].map(([k,l]) => `<button class="chip" data-act="bc-to" data-k="${k}" aria-pressed="${d.to===k}">${l}</button>`).join("")}</div>
+      ${d.to==="pick" ? `<div class="chips" style="margin-top:8px">${ids.map(id => `<button class="chip" data-act="bc-pick" data-id="${esc(id)}" aria-pressed="${d.pick.includes(id)}">${esc(pname(id))}${isGuest(id)?`<span class="gtag">Gast</span>`:""}</button>`).join("")}</div>` : ""}</div>
+    <p class="note" style="margin:0">Die Nachricht kommt in den nächsten 2–3 Minuten als Push und steht 3 Tage auf der Home-Seite.</p>`,
+    foot:`<span></span><button class="btn primary" data-act="bc-send" id="btnBcSend">Senden</button>` };
+}
+
 /* Startseite: aktuelle Abstimmung und Kurz-Tabelle */
 function viewHome(){
   const st = standings(); const ranked = st.filter(x=>x.ok);
@@ -1038,7 +1071,7 @@ function viewHome(){
           <div style="min-width:0"><div class="pname">${esc(pname(x.id))}${x.id===me?` <span class="pill info" style="vertical-align:1px">du</span>`:""}</div><div class="meta">${x.s}:${x.n} Siege · ${formHtml(x.form)}</div></div></div>
         <span class="amt-v" style="font-size:16px">${x.sp?pct(x.quote):"–"}</span></div>`).join("")}</div></section>`
     : `<section class="card"><h2>Tabelle</h2><div class="muted small">Noch keine Ergebnisse.</div></section>`;
-  return pollCard() + mini;
+  return broadcastCards() + pollCard() + mini;
 }
 function viewTable(){
   const st = standings();
@@ -1240,7 +1273,8 @@ const PUSH_TYPES = [
   ["missing","📝 Ergebnisse fehlen noch"],
   ["resconf","🎾 Ergebnis wartet auf meine Bestätigung"],
   ["confirm","💶 Zahlung wartet auf meine Bestätigung"],
-  ["devices","📱 Neues Gerät möchte beitreten"]
+  ["devices","📱 Neues Gerät möchte beitreten"],
+  ["news","📣 Mitteilungen von Michael"]
 ];
 const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
 let pushSupported = null;
@@ -1697,6 +1731,7 @@ function viewSettings(){
   ${accSection("people","👥","Spieler & Gäste", `${players().length} Spieler${guests().length?` · ${guests().length} ${guests().length===1?"Gast":"Gäste"}`:""}`, "", people)}
   ${accSection("push","🔔","Benachrichtigungen", pst==="on" ? "auf diesem Gerät aktiv" : "auf diesem Gerät aus", pst==="on" ? `<span class="pill good">an</span>` : `<span class="pill neutral">aus</span>`, pushCard())}
   ${accSection("devices","📱","Geräte & Zugänge", `${nDev} ${nDev===1?"Gerät":"Geräte"}${guestMembers.length?` · ${nGuestAct} von ${guestMembers.length} Gästen aktiv`:""}`, S.requests.length ? `<span class="pill info">${S.requests.length} neu</span>` : "", devicesCard())}
+  ${broadcastSection()}
   ${accSection("link","🔗","Liga-Link & App", "Link teilen, App neu laden", "", link)}`;
 }
 
@@ -1709,7 +1744,7 @@ function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = tru
 function renderModal(first){
   S._elo = null;
   const body = $("sheetBody"); const top = body.scrollTop;
-  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed, alerts:modalAlerts, res:modalRes}[S.modal];
+  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed, alerts:modalAlerts, res:modalRes, bc:modalBc}[S.modal];
   if(!fn) return;
   const {title, html, foot} = fn();
   $("sheetTitle").textContent = title; body.innerHTML = html; $("sheetFoot").innerHTML = foot;
@@ -1979,6 +2014,15 @@ document.addEventListener("click", e => {
     case "push-test": guarded(async () => { const ok = await write(() => DB.doc("members/"+S.uid).update({pushTest: true})); if(ok) toast("Test angefordert. Er kommt in den nächsten Minuten."); }); break;
     case "push-off": guarded(async () => { const ok = await write(() => DB.doc("members/"+S.uid).update({pushToken: null})); if(ok) toast("Benachrichtigungen auf diesem Gerät aus"); }); break;
     case "alerts": openModal("alerts", {}); break;
+    case "bc-new": openModal("bc", {title:"", body:"", to:"all", pick:[]}); break;
+    case "bc-to": d.to = el.dataset.k; renderModal(); break;
+    case "bc-pick": { const i = d.pick.indexOf(id); if(i>=0) d.pick.splice(i,1); else d.pick.push(id); renderModal(); break; }
+    case "bc-send": {
+      const body = (d.body||"").trim(); if(body.length < 2){ toast("Bitte eine Nachricht schreiben."); break; }
+      if(d.to==="pick" && !d.pick.length){ toast("Bitte mindestens einen Empfänger wählen."); break; }
+      const to = d.to==="pick" ? [...d.pick] : d.to;
+      guarded(async () => { const ok = await write(() => S.db.collection("broadcasts").doc(uid()).set({title:(d.title||"").trim(), body, to, by:getMe(), at:Date.now(), status:"queued"}));
+        if(ok){ closeModal(); toast("Wird gesendet · kommt in 2–3 Minuten an"); } }); break; }
     case "res-enter": openModal("res", {md: el.dataset.md, mid: el.dataset.mid, a:"", b:""}); break;
     case "res-save": {
       const a = parseInt(d.a,10), b = parseInt(d.b,10);
@@ -2194,7 +2238,7 @@ const deviceLabel = () => { const u = navigator.userAgent; const t = /iPhone/.te
   const app = (window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone) ? " · Homescreen-App" : " · Browser"; return t + app; };
 function isActive(m){ return !!m && m.active !== false; }
 let adminUnsubs = [];
-function stopData(){ S.unsubs.forEach(f => f()); S.unsubs = []; adminUnsubs.forEach(f => f()); adminUnsubs = []; S.db = null; S.config = null; S.matchdays = []; S.mdRaw = []; S.results = {}; S.ledger = []; S.votes = []; S.members = []; S.requests = []; }
+function stopData(){ S.unsubs.forEach(f => f()); S.unsubs = []; adminUnsubs.forEach(f => f()); adminUnsubs = []; S.db = null; S.config = null; S.matchdays = []; S.mdRaw = []; S.results = {}; S.ledger = []; S.votes = []; S.broadcasts = []; S.members = []; S.requests = []; }
 function watchAccess(uid){
   accessUnsubs.forEach(f => f()); accessUnsubs = [];
   S.memberChecked = false;
@@ -2287,7 +2331,8 @@ function subscribe(){
     DB.collection("results").onSnapshot(q => { S.results = Object.fromEntries(q.docs.map(x => [x.id, {...x.data(), id:x.id}])); mergeResults(); render(); }, () => {}),
     DB.collection("matchdays").onSnapshot(q => { S.mdRaw = q.docs.map(x => ({...x.data(), id:x.id})); mergeResults(); S.loaded.md = true; if(!q.metadata.fromCache) fresh.md = true; done(); render(); }, onErr),
     DB.collection("ledger").onSnapshot(q => { S.ledger = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.lg = true; if(!q.metadata.fromCache) fresh.lg = true; done(); render(); }, onErr),
-    DB.collection("votes").onSnapshot(q => { S.votes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {})
+    DB.collection("votes").onSnapshot(q => { S.votes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
+    DB.collection("broadcasts").onSnapshot(q => { S.broadcasts = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {})
   ];
 }
 S.authChecked = true;
