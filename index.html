@@ -330,7 +330,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.6";
+const APP_VERSION = "2026-11-11.7";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 
@@ -515,6 +515,7 @@ function balPill(b){
 
 /* ---------- Ansichten ---------- */
 function render(){
+  S._elo = null;
   tickCountdown();
   const cfg = S.config;
   $("leagueName").textContent = cfg?.name || "Padel-Liga";
@@ -550,6 +551,7 @@ function render(){
       <p class="muted">Lege zuerst Liganame und eure Spieler an. Danach könnt ihr Spieltage mit Ergebnissen eintragen und festhalten, wer seinen Platzanteil bezahlt hat.</p>
       ${canWrite() ? `<div class="row"><button class="btn primary" data-act="open-settings" id="btnSetup">Liga einrichten</button><button class="btn" data-act="open-import" id="btnImport">Daten aus alter App importieren</button></div>` : ""}</section>`;
   } else if(cfg){
+    if(S.view==="tabelle" || S.view==="spieltage") html += missingCard();
     if(S.view==="tabelle") html += pollCard();
     html += ({tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
   }
@@ -622,6 +624,15 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden) tickC
 const ME_KEY = "padel-liga-me";
 const getMe = () => { try{ const v = localStorage.getItem(ME_KEY); return players().some(p=>p.id===v) ? v : ""; }catch{ return ""; } };
 const setMe = v => { try{ localStorage.setItem(ME_KEY, v); }catch{} };
+function pollNotices(key){ return S.votes.filter(v => v.key===key && v.type==="moveup").sort((a,b)=>(b.t||0)-(a.t||0)); }
+/* Sagt jemand aus den ersten vier ab, rückt der Erste der Warteliste nach: das wird festgehalten und angezeigt */
+async function noteMoveUp(key, outId){
+  const P = pollFor(key); const idx = P.play.indexOf(outId);
+  if(idx < 0 || !P.wait.length) return null;
+  const inId = P.wait[0];
+  await write(() => S.db.collection("votes").doc(key+"_n_"+Date.now()).set({key, type:"moveup", in:inId, out:outId, t:Date.now()}));
+  return inId;
+}
 function pollFor(key){
   const ok = id => players().some(p=>p.id===id) || guests().some(g=>g.id===id);
   const vs = S.votes.filter(v => v.key===key && ok(v.pid));
@@ -656,7 +667,10 @@ function pollCard(){
       <button class="vbtn maybe" data-act="vote" data-v="maybe" aria-pressed="${mine==="maybe"}" ${me&&canWrite()?"":"disabled"}>? Vielleicht</button>
       <button class="vbtn no" data-act="vote" data-v="no" aria-pressed="${mine==="no"}" ${me&&canWrite()?"":"disabled"}>✕ Kann nicht</button>
     </div>
-    <div class="slots">${[0,1,2,3].map(i => P.play[i] ? `<div class="slot on">${avatar(P.play[i])}<span>${esc(pname(P.play[i]))}${isGuest(P.play[i])?`<br><span class="gtag" style="margin:0">Gast</span>`:""}</span></div>` : `<div class="slot">Platz ${i+1}<br>frei</div>`).join("")}</div>
+    ${(() => { const N = pollNotices(ns.key).filter(n => P.play.includes(n.in)); return N.length ? `<div class="notice small" style="background:var(--good-bg)">${N.map(n => `↑ <b>${esc(pname(n.in))}</b> ist für ${esc(pname(n.out))} nachgerückt`).join("<br>")}</div>` : ""; })()}
+    <div class="slots">${[0,1,2,3].map(i => { const id = P.play[i]; if(!id) return `<div class="slot">Platz ${i+1}<br>frei</div>`;
+      const moved = pollNotices(ns.key).some(n => n.in===id);
+      return `<div class="slot on" ${moved?`style="border-color:var(--primary)"`:""}>${avatar(id)}<span>${esc(pname(id))}${isGuest(id)?`<br><span class="gtag" style="margin:0">Gast</span>`:""}${moved?`<br><span class="gtag" style="margin:0;color:var(--primary)">nachgerückt</span>`:""}</span></div>`; }).join("")}</div>
     <div class="vlist">
       ${P.play.some(isGuest)?`<div class="vrow"><span class="k">Gäste</span><span>${names(P.play.filter(isGuest))}</span></div>`:""}
       ${P.wait.length?`<div class="vrow"><span class="k">Warteliste</span><span>${names(P.wait)}</span></div>`:""}
@@ -665,7 +679,7 @@ function pollCard(){
       <div class="vrow"><span class="k">Noch offen</span><span>${names(P.open)}</span></div>
     </div>
     ${canWrite()?`<div><button class="btn sm" data-act="poll-guest" id="btnPollGuest">${ICON.plus}Gast eintragen</button></div>`:""}
-    <p class="note" style="margin:0">Die ersten vier Zusagen spielen, weitere kommen auf die Warteliste. Steht das Spiel, wird der Spieltag um ${sched().start} Uhr automatisch angelegt. Nach Spielende startet die Abstimmung für den nächsten Termin.</p>
+    <p class="note" style="margin:0">Die ersten vier Zusagen spielen, weitere kommen auf die Warteliste. Sagt jemand ab, rückt der Erste der Warteliste automatisch nach. Steht das Spiel, wird der Spieltag um ${sched().start} Uhr automatisch angelegt. Nach Spielende startet die Abstimmung für den nächsten Termin.</p>
   </section>`;
 }
 function modalPollGuest(){
@@ -696,6 +710,27 @@ async function savePollGuest(){
   if(ok){ closeModal(); toast(pname(gid)+" ist eingetragen"); }
 }
 
+/* Erinnerung: Spieltag ist vorbei, aber Ergebnisse fehlen */
+function missingResults(){
+  const now = new Date(); const nums = mdNumbers();
+  return [...S.matchdays].sort(byDate).filter(md => {
+    if(!md.date) return false;
+    const end = atTime(new Date(md.date+"T12:00:00"), sched().end);
+    if(now < end) return false;
+    const ms = md.matches||[];
+    return !ms.length || ms.some(m => !result(m).played);
+  }).map(md => ({md, n:nums[md.id], missing:(md.matches||[]).filter(m=>!result(m).played).length}));
+}
+function missingCard(){
+  if(!S.config) return "";
+  const L = missingResults(); if(!L.length) return "";
+  return `<section class="card" style="border:1.5px solid color-mix(in srgb,var(--bad) 45%,var(--line));background:var(--bad-bg);display:grid;gap:10px">
+    <div class="row between"><h2 style="margin:0">Ergebnisse fehlen</h2><span class="pill bad">${L.length} ${L.length===1?"Spieltag":"Spieltage"}</span></div>
+    ${L.map(x => `<div class="row between" style="flex-wrap:nowrap"><div class="small"><b>Spieltag ${x.n}</b> · ${esc(fmtDate(x.md.date))}<br><span class="muted">${x.missing ? `${x.missing} ${x.missing===1?"Runde":"Runden"} ohne Ergebnis` : "Noch keine Runden eingetragen"}</span></div>
+      ${canWrite()?`<button class="btn primary sm" data-act="edit-md" data-id="${esc(x.md.id)}">Eintragen</button>`:""}</div>`).join("")}
+    <p class="note" style="margin:0">Leere Runden, die nicht gespielt wurden, kannst du beim Eintragen entfernen.</p>
+  </section>`;
+}
 /* Vorschau unter „Spieltage“ */
 function previewCard(){
   if(!S.config) return "";
@@ -710,8 +745,8 @@ function previewCard(){
       <div class="md-title"><div class="md-no">Spieltag ${n} <span class="pill neutral" style="vertical-align:2px">Vorschau</span></div><div class="md-sub">${WD[ns.start.getDay()]}, ${sched().start}–${sched().end} Uhr · ${countdownText(ns)}</div></div>
     </div>
     ${full ? `<div class="row">${P.play.map(id=>`<span class="dr"><b>${esc(pname(id))}</b>${isGuest(id)?`<span class="gtag">Gast</span>`:""}</span>`).join("")}${cost?`<span class="pill neutral">je ${eur.format(cost/4)}</span>`:""}</div>
-      <div class="rounds">${rounds.map((m,i)=>matchLine(m,i).replace(">offen<",">vs<")).join("")}</div>
-      <p class="note" style="margin:0">Wird um ${sched().start} Uhr automatisch als Spieltag angelegt. Danach könnt ihr die Ergebnisse eintragen.</p>
+      <div class="rounds">${rounds.map((m,i)=>matchLine(m,i)).join("")}</div>
+      <p class="note" style="margin:0">In der Mitte steht die Siegchance laut Elo. Der Spieltag wird um ${sched().start} Uhr automatisch angelegt, danach könnt ihr die Ergebnisse eintragen.</p>
       ${canWrite()?`<div><button class="btn sm" data-act="auto-now" data-key="${ns.key}" id="btnAutoNow">Jetzt schon anlegen</button></div>`:""}`
     : `<div class="slots">${[0,1,2,3].map(i => P.play[i] ? `<div class="slot on">${avatar(P.play[i])}<span>${esc(pname(P.play[i]))}</span></div>` : `<div class="slot">offen</div>`).join("")}</div>
       <p class="note" style="margin:0">Noch ${4-P.play.length} ${4-P.play.length===1?"Zusage fehlt":"Zusagen fehlen"}. Sobald vier zugesagt haben, stehen hier die Paarungen.</p>
@@ -828,7 +863,8 @@ function matchLine(m, i){
   const r = result(m);
   const ta = (m.a||[]).map(nameHtml).join(" / "), tb = (m.b||[]).map(nameHtml).join(" / ");
   const sets = (m.sets||[]).filter(s => s?.a!=null && s?.b!=null);
-  const score = !r.played ? `<span class="score" style="font-weight:600;color:var(--muted)">offen</span>`
+  const wp = !r.played ? winProb(m) : null;
+  const score = !r.played ? (wp!=null ? `<span class="score" title="Siegchance laut Elo" style="font-weight:700;color:var(--ink-2)">${wp} : ${100-wp}<small>% Chance</small></span>` : `<span class="score" style="font-weight:600;color:var(--muted)">offen</span>`)
     : sets.length===1 ? `<span class="score">${sets[0].a} : ${sets[0].b}</span>`
     : `<span class="score">${r.sa} : ${r.sb}<small>${sets.map(s=>`${s.a}:${s.b}`).join(" ")}</small></span>`;
   return `<div class="rnd ${m.extra?"extra":""}"><span class="rl" title="${roundLabel(m,i)}">${m.extra?"EX":"R"+(i+1)}</span><div class="match"><div class="ta ${r.played&&r.w==="a"?"win":""}">${ta}</div>
@@ -927,8 +963,15 @@ function elo(){
   const trend = id => { const h = hist[id]||[]; if(!h.length) return 0; const last = h[h.length-1]; const prev = h.length>1 ? h[h.length-2].r : ELO_START; return Math.round(last.r - prev); };
   return {R, rating, trend, peak: id => Math.round(peak[id] ?? ELO_START), hist};
 }
+function eloC(){ return S._elo ||= elo(); }
+function winProb(m){
+  const a = (m.a||[]).filter(Boolean), b = (m.b||[]).filter(Boolean); if(a.length!==2 || b.length!==2) return null;
+  const E = eloC(); const r = id => E.R[id] ?? ELO_START;
+  const pa = 1/(1+Math.pow(10, ((r(b[0])+r(b[1]))/2 - (r(a[0])+r(a[1]))/2)/400));
+  return Math.round(pa*100);
+}
 function eloCard(){
-  const E = elo(); const ps = players().filter(p => E.R[p.id]!=null);
+  const E = eloC(); const ps = players().filter(p => E.R[p.id]!=null);
   if(!ps.length) return "";
   const rows = ps.map(p => ({id:p.id, r:E.rating(p.id), t:E.trend(p.id)})).sort((a,b)=>b.r-a.r);
   const lo = Math.min(...rows.map(x=>x.r)), hi = Math.max(...rows.map(x=>x.r)); const span = Math.max(hi-lo, 1);
@@ -1032,6 +1075,24 @@ function playerStats(id){
   const dayWins = S.matchdays.filter(md => dayRanking(md).winners.includes(id)).length;
   return {list, days:days.length, wins, losses, draws, gw, gl, best, curType, curLen, close:close.length, closeW, bigWin, bigLoss, partners, opps, timeline, dayWins};
 }
+function eloChartSvg(id){
+  const h = (eloC().hist[id]||[]); if(h.length < 1) return `<div class="muted small">Noch keine Daten.</div>`;
+  const tl = [{md:null, r:ELO_START}, ...h];
+  const vals = tl.map(t=>t.r); let lo = Math.min(...vals, ELO_START), hi = Math.max(...vals, ELO_START);
+  const padv = Math.max(10, (hi-lo)*.15); lo = Math.floor((lo-padv)/10)*10; hi = Math.ceil((hi+padv)/10)*10;
+  const W=320, H=150, L=40, R=14, T=12, B=24, iw=W-L-R, ih=H-T-B;
+  const X = i => L + i*iw/(tl.length-1), Y = v => T + (1-(v-lo)/(hi-lo))*ih;
+  const pts = tl.map((t,i)=>[X(i),Y(t.r)]);
+  const line = pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+  const nums = mdNumbers(); const step = Math.ceil(tl.length/6); const last = pts[pts.length-1];
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Elo-Verlauf">
+    ${[hi, ELO_START, lo].map(v=>`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" ${v===ELO_START?'stroke-dasharray="3 3"':""}/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${v}</text>`).join("")}
+    <path d="${line}" fill="none" stroke="#0e8a7e" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${pts.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="${i===pts.length-1?4.5:2.5}" fill="${i===pts.length-1?"#0e8a7e":"var(--surface)"}" stroke="#0e8a7e" stroke-width="1.8"/>`).join("")}
+    ${tl.map((t,i)=> (i%step===0 || i===tl.length-1) ? `<text x="${X(i)}" y="${H-6}" text-anchor="middle" font-size="10" fill="var(--muted)">${t.md ? "ST "+nums[t.md.id] : "Start"}</text>` : "").join("")}
+    <text x="${Math.min(last[0], W-R-2)}" y="${Math.max(last[1]-9, 10)}" text-anchor="end" font-size="11" font-weight="700" fill="var(--ink)">${Math.round(tl[tl.length-1].r)}</text>
+  </svg>`;
+}
 function chartSvg(tl){
   if(tl.length < 2) return `<div class="muted small">Der Verlauf erscheint ab dem zweiten Spieltag.</div>`;
   const W=320, H=150, L=34, R=14, T=12, B=24, iw=W-L-R, ih=H-T-B;
@@ -1082,6 +1143,7 @@ function modalPlayer(){
       <div class="kpi"><b>${P.days}/${playedDays()}</b><span>Spieltage dabei</span></div>
     </div>
     <div class="sect"><h3>Verlauf der Siegquote</h3><div class="card" style="padding:12px 10px 6px">${chartSvg(P.timeline)}</div></div>
+    <div class="sect"><h3>Elo-Verlauf</h3><div class="card" style="padding:12px 10px 6px">${eloChartSvg(id)}</div></div>
     <div class="sect"><h3>Fakten</h3><div class="facts">
       ${(() => { const E = elo(); return fact("Elo-Spielstärke", `${E.rating(id)} · Bestwert ${E.peak(id)}`); })()}
       ${fact("Aktuelle Serie", streakTxt)}
@@ -1130,6 +1192,7 @@ function openModal(kind, draft){
 }
 function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = true; if(updatePending) reloadFresh(); }
 function renderModal(first){
+  S._elo = null;
   const body = $("sheetBody"); const top = body.scrollTop;
   const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare}[S.modal];
   if(!fn) return;
@@ -1380,13 +1443,19 @@ document.addEventListener("click", e => {
     case "poll-guest": { const ns = nextSession(); if(!ns) break; openModal("pguest", {key:ns.key, label:fmtSession(ns), name:"", host:"", pick:null}); break; }
     case "pg-pick": d.pick = d.pick===id ? null : id; renderModal(); break;
     case "pg-save": guarded(savePollGuest); break;
-    case "unvote": { const ns = nextSession(); if(!ns) break; guarded(async () => { const ok = await write(() => S.db.collection("votes").doc(ns.key+"_"+id).delete()); if(ok) toast(pname(id)+" ausgetragen"); }); break; }
+    case "unvote": { const ns = nextSession(); if(!ns) break; guarded(async () => {
+        const moved = await noteMoveUp(ns.key, id);
+        const ok = await write(() => S.db.collection("votes").doc(ns.key+"_"+id).delete());
+        if(ok) toast(pname(id)+" ausgetragen" + (moved ? ` · ${pname(moved)} rückt nach` : "")); }); break; }
     case "auto-now": guarded(async () => { const ok = await createFromPoll(el.dataset.key); if(ok) toast("Spieltag angelegt"); }); break;
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
-      guarded(async () => { const ok = await write(() => cur===v ? ref.delete() : ref.set({key:ns.key, pid:me, s:v, t: cur==="yes" && v==="yes" ? Date.now() : Date.now()}));
-        if(ok) toast(cur===v ? "Stimme zurückgenommen" : v==="yes" ? "Du bist dabei" : v==="maybe" ? "Als vielleicht eingetragen" : "Abgesagt"); });
+      guarded(async () => {
+        const leaving = cur==="yes" && v!=="yes" || (cur==="yes" && cur===v);
+        const moved = leaving ? await noteMoveUp(ns.key, me) : null;
+        const ok = await write(() => cur===v ? ref.delete() : ref.set({key:ns.key, pid:me, s:v, t:Date.now()}));
+        if(ok) toast((cur===v ? "Stimme zurückgenommen" : v==="yes" ? "Du bist dabei" : v==="maybe" ? "Als vielleicht eingetragen" : "Abgesagt") + (moved ? ` · ${pname(moved)} rückt nach` : "")); });
       break; }
     case "toggle-pairs": S.showAllPairs = !S.showAllPairs; render(); break;
     case "copy-link": navigator.clipboard?.writeText(shareLink()).then(() => toast("Link kopiert"), () => { const i = $("shareLink"); i.select(); toast("Link markiert, jetzt kopieren"); }); break;
