@@ -332,7 +332,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.17";
+const APP_VERSION = "2026-11-11.18";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1065,7 +1065,9 @@ function viewCash(){
         <div class="small" style="color:var(--ink-2)">${neg ? `noch offen${om.length?` · ${om.map(o=>"ST "+nums[o.md.id]).join(", ")}`:""}` : creditLine(mine.bal)}</div></div>
         ${neg ? `<span class="pill bad">offen</span>` : `<span class="pill good">✓</span>`}</div>
       ${!neg ? gameDots(mine.bal) : ""}
-      ${neg && canWrite() ? `<div class="row">${canPP?`<button class="btn primary" data-act="pp" data-id="${esc(me)}" data-amt="${-mine.bal}">${PP_ICON}Mit PayPal zahlen</button>`:""}<button class="btn" data-act="settle" data-id="${esc(me)}" data-amt="${-mine.bal}">Als bezahlt eintragen</button></div>` : ""}
+      ${neg && canWrite() ? `<div class="row">${canPP?`<button class="btn primary" data-act="pp" data-id="${esc(me)}" data-amt="${-mine.bal}">${PP_ICON}Mit PayPal an ${esc(pname(ppOwner()))} zahlen</button>`:""}<button class="btn" data-act="settle" data-id="${esc(me)}" data-amt="${-mine.bal}">Als bezahlt eintragen</button></div>` : ""}
+      ${!neg && canWrite() && isGuest(me) && ppReady() && perGame() ? `<div style="display:grid;gap:6px"><button class="btn primary" data-act="pp" data-id="${esc(me)}" data-amt="${perGame()}">${PP_ICON}Anteil für nächsten Spieltag an ${esc(pname(ppOwner()))} senden · ${eur.format(perGame())}</button>
+        <span class="muted small">Als Gast kannst du deinen Anteil schon vorab per PayPal schicken. Er wird dann mit dem nächsten Spieltag verrechnet.</span></div>` : ""}
     </section>`; })() : "";
 
   // Kontostand: eine Zeile pro Person, Antippen klappt Details auf
