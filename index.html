@@ -267,6 +267,9 @@ const pname = id => players().find(p => p.id === id)?.name || guests().find(g =>
 const guestObj = id => guests().find(g => g.id === id) || draftGuests().find(g => g.id === id);
 const hostOf = id => { const h = guestObj(id)?.host; return h && players().some(p => p.id === h) ? h : null; };
 const payerOf = id => hostOf(id) || id;
+/* Gäste, die selbst zahlen, geben ihr Geld an diesen Spieler (z. B. wer vorgestreckt hat) */
+const cashier = () => { const c = S.config?.guestCashier; return c && players().some(p => p.id === c) ? c : null; };
+const paysCashier = id => isGuest(id) && !hostOf(id) && !!cashier();
 const gtag = id => isGuest(id) ? `<span class="gtag">Gast${hostOf(id) ? " · über "+esc(pname(hostOf(id))) : ""}</span>` : "";
 const hostOpts = sel => `<option value="">zahlt selbst</option>` + players().map(p => `<option value="${esc(p.id)}" ${p.id===sel?"selected":""}>übernimmt ${esc(p.name)}</option>`).join("");
 const nameHtml = id => esc(pname(id)) + gtag(id);
@@ -359,7 +362,7 @@ function finance(){
       for(const id of parts){
         const who = f[payerOf(id)] ? payerOf(id) : id;
         f[who].owed += sh;
-        if(md.paid?.[id]){ f[who].paid += sh; paidTotal += sh; } else open.push(id);
+        if(md.paid?.[id]){ f[who].paid += sh; if(paysCashier(id)) f[cashier()].paid -= sh; else paidTotal += sh; } else open.push(id);
       }
       if(open.length) openMd.push({md, share:sh, open});
     }
@@ -371,7 +374,7 @@ function finance(){
       if(!ps.length) continue;
       total += amt; ps.forEach(id => f[id].owed += amt/ps.length);
     } else if(e.type==="payment" && f[e.playerId]){
-      f[e.playerId].paid += amt; paidTotal += amt;
+      f[e.playerId].paid += amt; if(paysCashier(e.playerId)) f[cashier()].paid -= amt; else paidTotal += amt;
     } else if(e.type==="transfer" && f[e.from] && f[e.to]){
       f[e.from].paid += amt; f[e.to].paid -= amt;
     }
@@ -541,7 +544,7 @@ function viewCash(){
   ${canWrite()?`<div class="row"><button class="btn primary" data-act="new-pay" id="btnNewPay">+ Zahlung erfassen</button><button class="btn" data-act="new-transfer" id="btnNewTr">+ Umbuchung</button><button class="btn" data-act="new-cost" id="btnNewCost">+ Sonstige Kosten</button></div>`:""}
   <section class="card"><h2>Kontostand pro Spieler</h2><div class="list">${rows}</div>
     <p class="muted small" style="margin:8px 0 0">Platzkosten eines Spieltags werden gleichmäßig auf die Teilnehmer verteilt. Übernimmt ein Spieler die Kosten eines Gasts, landet dessen Anteil auf seinem Konto. „Begleichen“ trägt eine Zahlung über den offenen Betrag ein.</p></section>
-  ${F.guestRows.length ? `<section class="card"><h2>Gäste</h2><div class="list">${F.guestRows.map(x => `<div class="li"><div><div class="pname">${esc(pname(x.id))}</div><div class="meta num">Anteil ${eur.format(x.owed)} · bezahlt ${eur.format(x.paid)}</div></div>
+  ${F.guestRows.length ? `<section class="card"><h2>Gäste</h2>${cashier() ? `<p class="muted small" style="margin:0 0 4px">Gäste zahlen ihren Anteil an ${esc(pname(cashier()))}. Das verringert ${esc(pname(cashier()))}s Guthaben um denselben Betrag.</p>` : ""}<div class="list">${F.guestRows.map(x => `<div class="li"><div><div class="pname">${esc(pname(x.id))}</div><div class="meta num">Anteil ${eur.format(x.owed)} · bezahlt ${eur.format(x.paid)}</div></div>
     <div class="row">${balPill(x.bal)}${canWrite() && x.bal < -0.004 ? `<button class="btn sm" data-act="settle" data-id="${esc(x.id)}" data-amt="${-x.bal}">Begleichen</button>`:""}</div></div>`).join("")}</div></section>` : ""}
   <section class="card"><h2>Offene Spieltagsbeiträge</h2>${openMd ? `<p class="muted small" style="margin:0 0 4px">Tippe auf einen Namen, sobald der Anteil bezahlt ist.</p><div class="list">${openMd}</div>` : `<div class="muted">Alle Spieltage sind bezahlt.</div>`}</section>
   <section class="card"><h2>Zahlungen &amp; sonstige Kosten</h2>${led?`<div class="list">${led}</div>`:`<div class="muted">Noch keine Einträge. Hier landen Einzahlungen (z.&nbsp;B. Vorkasse) und Kosten wie neue Bälle.</div>`}</section>`;
@@ -555,6 +558,7 @@ function viewSettings(){
       <div><div class="lbl">Saison</div>${esc(c.season||"–")}</div>
       <div><div class="lbl">Platzkosten (Standard)</div><span class="num">${eur.format(num(c.defaultCost))}</span></div>
       <div><div class="lbl">Mindestteilnahme</div>${minPct()} % der Spieltage</div>
+      <div><div class="lbl">Gäste zahlen an</div>${cashier() ? esc(pname(cashier())) : "Liga-Kasse"}</div>
       <div><div class="lbl">Ort (Standard)</div>${esc(c.defaultLocation||"–")}</div>
     </div></section>
   <section class="card"><h2>Spieler</h2><div class="list">${rows}</div></section>
@@ -653,7 +657,9 @@ function modalSettings(){
       <div class="field"><label for="s-cost">Platzkosten pro Spieltag (€)</label><input class="input" inputmode="decimal" id="s-cost" data-f="defaultCost" value="${esc(d.defaultCost)}"></div>
       <div class="field"><label for="s-loc">Ort (Standard)</label><input class="input" id="s-loc" data-f="defaultLocation" value="${esc(d.defaultLocation)}"></div>
     </div>
-    <div class="field"><label for="s-min">Mindestteilnahme für die Wertung (% der Spieltage)</label><input class="input" inputmode="numeric" id="s-min" data-f="minPct" value="${esc(d.minPct)}" style="max-width:120px"></div>`,
+    <div class="field"><label for="s-min">Mindestteilnahme für die Wertung (% der Spieltage)</label><input class="input" inputmode="numeric" id="s-min" data-f="minPct" value="${esc(d.minPct)}" style="max-width:120px"></div>
+    <div class="field"><label for="s-cash">Gäste zahlen ihren Anteil an</label><select class="input" id="s-cash" data-f="guestCashier"><option value="">Liga-Kasse (niemand bestimmtes)</option>${d.players.filter(p=>(p.name||"").trim()).map(p => `<option value="${esc(p.id)}" ${p.id===d.guestCashier?"selected":""}>${esc(p.name)}</option>`).join("")}</select>
+      <div class="muted small">Zahlt ein Gast an diese Person, ist der Gast ausgeglichen und ihr Guthaben sinkt um denselben Betrag.</div></div>`,
     foot: `<span></span><button class="btn primary" data-act="s-save" id="btnSaveSettings">Speichern</button>`
   };
 }
@@ -771,7 +777,7 @@ async function saveSettings(){
   if(ps.length<4){ toast("Bitte mindestens 4 Spieler eintragen."); return; }
   const gs = d.guests.map(g => { const o = {id:g.id, name:(g.name||"").trim()}; if(g.host) o.host = g.host; return o; }).filter(g => g.name);
   const body = {name:(d.name||"").trim()||"Padel-Liga", season:(d.season||"").trim(), players:ps, guests:gs, defaultCost:r2(num(d.defaultCost)), defaultLocation:(d.defaultLocation||"").trim(),
-    minPct:Math.max(0, Math.min(100, Math.round(num(d.minPct)))), updatedAt:Date.now()};
+    minPct:Math.max(0, Math.min(100, Math.round(num(d.minPct)))), guestCashier: ps.some(p => p.id===d.guestCashier) ? d.guestCashier : "", updatedAt:Date.now()};
   const ok = await write(() => S.db.doc("league/config").set(body));
   if(ok){ closeModal(); toast("Liga gespeichert"); }
 }
@@ -816,7 +822,7 @@ document.addEventListener("click", e => {
     case "open-settings": {
       const c = S.config;
       const ps = c ? players().map(p=>({...p})) : Array.from({length:6},()=>({id:uid(),name:""}));
-      openModal("settings", {name:c?.name||"", season:c?.season||"", players:ps, defaultCost:c?.defaultCost ?? "", defaultLocation:c?.defaultLocation||"", minPct:c?.minPct ?? 50, guests:guests().map(g=>({...g}))});
+      openModal("settings", {name:c?.name||"", season:c?.season||"", players:ps, defaultCost:c?.defaultCost ?? "", defaultLocation:c?.defaultLocation||"", minPct:c?.minPct ?? 50, guestCashier:c?.guestCashier||"", guests:guests().map(g=>({...g}))});
       break; }
     case "s-add-player": d.players.push({id:uid(),name:""}); renderModal(); break;
     case "s-del-player": d.players.splice(+el.dataset.i,1); renderModal(); break;
