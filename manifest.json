@@ -1,9 +1,9 @@
 {
-  "name": "Padel-Liga",
-  "short_name": "Padel-Liga",
+  "name": "Padel-Masters",
+  "short_name": "Padel-Masters",
   "display": "standalone",
-  "background_color": "#edf1f6",
-  "theme_color": "#1d5bbd",
+  "background_color": "#E6EFF6",
+  "theme_color": "#0B63B6",
   "icons": [
     {
       "src": "icon-192.png",

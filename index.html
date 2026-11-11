@@ -3,17 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Padel-Liga</title>
-<meta name="theme-color" content="#1d5bbd">
+<title>Padel-Masters</title>
+<meta name="theme-color" content="#0B63B6">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Padel-Liga">
+<meta name="apple-mobile-web-app-title" content="Padel-Masters">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;1,700;1,800&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   /* Layout: App-Leiste oben (Marine), Inhalt in ruhigen weißen Karten, Navigation unten am Handy / oben rechts am Desktop */
@@ -308,6 +308,42 @@ textarea.input{min-height:160px;font-family:ui-monospace,monospace;font-size:13p
 .toast[hidden]{display:none}
 @media (min-width:760px){.toast{bottom:24px}}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .2s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
+/* ===== Design „Court Club“: Padel-Court-Blau, Spielfeldlinien, Ball-Gelb, kursive Sportschrift ===== */
+:root{--bg:#E6EFF6;--surface:#fff;--surface-2:#EEF4F9;--ink:#0A2540;--ink-2:#294766;--muted:#5F7690;--line:#D5E2EE;
+ --primary:#0B63B6;--primary-ink:#fff;--primary-soft:#E1EEFA;--navy:#08305C;--navy-2:#0B63B6;--ball:#D8F04A;--ball-ink:#14260A;
+ --font:"Barlow",system-ui,sans-serif;--r:10px;--shadow:0 2px 0 #CADCEC,0 10px 24px rgba(8,48,92,.06)}
+h1,h2,h3,.md-no,.acc-t{font-family:"Barlow Condensed",sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;letter-spacing:.01em}
+.card h2,.card-head h2{font-size:21px}
+.appbar{position:relative;overflow:hidden;padding-bottom:20px;
+ background:
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 200' preserveAspectRatio='none'%3E%3Cg fill='none' stroke='%23ffffff' stroke-opacity='.18' stroke-width='2'%3E%3Cpath d='M60 200 L140 20 L260 20 L340 200 Z'/%3E%3Cpath d='M200 20 V200'/%3E%3Cpath d='M95 120 H305'/%3E%3Cpath d='M118 70 H282'/%3E%3C/g%3E%3Cpath d='M0 105 H400' stroke='%23ffffff' stroke-opacity='.35' stroke-width='3'/%3E%3C/svg%3E") center/100% 100% no-repeat,
+  linear-gradient(180deg,#0A4B8F 0%,#0B63B6 100%)}
+.appbar::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(255,255,255,.12) 0 2px,transparent 2px 80px);background-size:80px 100%;pointer-events:none}
+.brand h1{font-size:26px;line-height:1}
+.logo{background:var(--ball);border-radius:50%}
+.cd{background:rgba(255,255,255,.14);border:1.5px solid rgba(255,255,255,.35);border-radius:6px;backdrop-filter:blur(6px)}
+.cd .cd-v{font-family:"Barlow Condensed";font-style:italic;font-weight:800;font-size:20px !important}
+.card{border:0;border-radius:10px;box-shadow:var(--shadow);border-top:4px solid var(--primary)}
+.rank{border-radius:4px;transform:skewX(-10deg);font-family:"Barlow Condensed";font-style:italic;font-size:16px;font-weight:800}
+.btn{border-radius:6px;font-family:"Barlow Condensed";font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:15px}
+.btn.primary{background:var(--ball);color:var(--ball-ink);border-color:var(--ball)}
+.vbtn{border-radius:6px;font-family:"Barlow Condensed";font-style:italic;font-weight:800;text-transform:uppercase;font-size:16px}
+.vbtn[aria-pressed="true"].yes{background:var(--primary);border-color:var(--primary)}
+.slot{border-radius:6px}.slot.on{border-color:var(--primary);background:var(--primary-soft)}
+.pill{border-radius:4px;text-transform:uppercase;letter-spacing:.04em;font-size:11px}
+.amt-v,.pts{font-family:"Barlow Condensed";font-style:italic;font-weight:800;font-size:20px !important}
+.score{border-radius:4px;background:var(--navy);color:#fff;border:0;font-family:"Barlow Condensed";font-style:italic}
+@media (max-width:759px){.tabs{background:var(--navy);border-top:0}.tab{color:rgba(255,255,255,.6)}.tab[aria-current="page"]{background:var(--ball);color:var(--ball-ink)}}
+.hero{background:linear-gradient(135deg,#08305C,#0B63B6)}
+.alarm{border-radius:6px;font-family:"Barlow Condensed";font-weight:700;text-transform:uppercase}
+
+/* Court Club im Dunkelmodus */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+ --bg:#07182B;--surface:#0E2238;--surface-2:#13293F;--ink:#EAF2FA;--ink-2:#C2D3E4;--muted:#8AA2BA;--line:#1E3550;
+ --primary:#4FA3F0;--primary-ink:#06182B;--primary-soft:#12304E;--navy:#061A33;--navy-2:#0B4F92;--shadow:0 2px 0 #051427;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#07182B;--surface:#0E2238;--surface-2:#13293F;--ink:#EAF2FA;--ink-2:#C2D3E4;--muted:#8AA2BA;--line:#1E3550;
+ --primary:#4FA3F0;--primary-ink:#06182B;--primary-soft:#12304E;--navy:#061A33;--navy-2:#0B4F92;--shadow:0 2px 0 #051427;color-scheme:dark}
+#leagueSub{display:none}
 </style>
 </head>
 <body>
@@ -316,7 +352,7 @@ textarea.input{min-height:160px;font-family:ui-monospace,monospace;font-size:13p
     <div class="brand">
       <div class="logo" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#d9f24b"/><path d="M5.2 5.2a10 10 0 0 1 0 13.6M18.8 5.2a10 10 0 0 0 0 13.6" fill="none" stroke="#fff" stroke-width="1.8"/></svg></div>
       <div style="min-width:0">
-        <h1 id="leagueName">Padel-Liga</h1>
+        <h1 id="leagueName">Padel-Masters</h1>
         <div class="sub" id="leagueSub">Wird geladen …</div>
       </div>
     </div>
@@ -356,7 +392,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.29";
+const APP_VERSION = "2026-11-11.30";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -558,7 +594,7 @@ function render(){
   try{ updateAlarm(); }catch{}
   tickCountdown();
   const cfg = S.config;
-  $("leagueName").textContent = cfg?.name || "Padel-Liga";
+  $("leagueName").textContent = cfg?.name || "Padel-Masters";
   const nMd = S.matchdays.length, nP = players().length;
   $("leagueSub").textContent = !allLoaded() ? "Wird geladen …" : cfg ? `${nP} Spieler · ${nMd} ${nMd===1?"Spieltag":"Spieltage"}${cfg.season ? " · "+cfg.season : ""}` : "Noch nicht eingerichtet";
   VIEWS.forEach(v => { const t = $("tab-"+v); if(v===S.view) t.setAttribute("aria-current","page"); else t.removeAttribute("aria-current"); });
@@ -2102,6 +2138,7 @@ function devicesCard(){
 let namesFixed = false;
 function fixNames(){
   if(namesFixed || !S.config || !Array.isArray(S.config.players)) return;
+  if(S.config.name==="Padel-Liga" && !S.config.renamedMasters){ write(() => DB.doc("league/config").update({name:"Padel-Masters", renamedMasters:true, updatedAt:Date.now()})); }
   if(!S.config.players.some(p => p.name==="Danlel")) return;
   namesFixed = true;
   write(() => DB.doc("league/config").update({players: S.config.players.map(p => p.name==="Danlel" ? {...p, name:"Daniel"} : p), updatedAt:Date.now()}));
