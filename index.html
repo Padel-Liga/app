@@ -167,6 +167,7 @@ td.pname{white-space:normal;min-width:90px}
 .set .input{width:46px;text-align:center;padding:8px 4px;font-variant-numeric:tabular-nums}
 .set span{font-size:12px;color:var(--muted);font-weight:600;margin-right:2px}
 .prow{display:flex;gap:8px;align-items:center}
+.prow .input{min-width:0;flex:1}
 
 textarea.input{min-height:160px;font-family:ui-monospace,monospace;font-size:13px}
 .gtag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 5px;border-radius:4px;background:var(--soft);color:var(--muted);vertical-align:2px;margin-left:3px}
@@ -263,7 +264,11 @@ const guests = () => Array.isArray(S.config?.guests) ? S.config.guests : [];
 const draftGuests = () => Array.isArray(S.draft?.newGuests) ? S.draft.newGuests : [];
 const isGuest = id => guests().some(g => g.id === id) || draftGuests().some(g => g.id === id);
 const pname = id => players().find(p => p.id === id)?.name || guests().find(g => g.id === id)?.name || draftGuests().find(g => g.id === id)?.name || "Ehemalig";
-const gtag = id => isGuest(id) ? `<span class="gtag">Gast</span>` : "";
+const guestObj = id => guests().find(g => g.id === id) || draftGuests().find(g => g.id === id);
+const hostOf = id => { const h = guestObj(id)?.host; return h && players().some(p => p.id === h) ? h : null; };
+const payerOf = id => hostOf(id) || id;
+const gtag = id => isGuest(id) ? `<span class="gtag">Gast${hostOf(id) ? " · über "+esc(pname(hostOf(id))) : ""}</span>` : "";
+const hostOpts = sel => `<option value="">zahlt selbst</option>` + players().map(p => `<option value="${esc(p.id)}" ${p.id===sel?"selected":""}>übernimmt ${esc(p.name)}</option>`).join("");
 const nameHtml = id => esc(pname(id)) + gtag(id);
 const fmtDate = (d, long) => { if(!d) return "Ohne Datum"; const x = new Date(d+"T12:00:00"); return isNaN(x) ? d : x.toLocaleDateString("de-DE", long ? {weekday:"long",day:"numeric",month:"long",year:"numeric"} : {day:"2-digit",month:"2-digit",year:"numeric"}); };
 const byDate = (a,b) => (a.date||"").localeCompare(b.date||"") || (a.createdAt||0)-(b.createdAt||0);
@@ -352,8 +357,9 @@ function finance(){
     if(cost>0 && parts.length){
       total += cost; const sh = cost/parts.length; const open = [];
       for(const id of parts){
-        f[id].owed += sh;
-        if(md.paid?.[id]){ f[id].paid += sh; paidTotal += sh; } else open.push(id);
+        const who = f[payerOf(id)] ? payerOf(id) : id;
+        f[who].owed += sh;
+        if(md.paid?.[id]){ f[who].paid += sh; paidTotal += sh; } else open.push(id);
       }
       if(open.length) openMd.push({md, share:sh, open});
     }
@@ -366,6 +372,8 @@ function finance(){
       total += amt; ps.forEach(id => f[id].owed += amt/ps.length);
     } else if(e.type==="payment" && f[e.playerId]){
       f[e.playerId].paid += amt; paidTotal += amt;
+    } else if(e.type==="transfer" && f[e.from] && f[e.to]){
+      f[e.from].paid += amt; f[e.to].paid -= amt;
     }
   }
   const all = Object.values(f).map(x => ({...x, bal: r2(x.paid - x.owed)}));
@@ -515,11 +523,13 @@ function viewCash(){
       <div class="small"><b>Spieltag ${nums[o.md.id]}</b> · ${esc(fmtDate(o.md.date))} · je <span class="num">${eur.format(o.share)}</span></div>
       <div class="chips">${o.open.map(id => `<button class="chip paid" aria-pressed="false" ${canWrite()?"":"disabled"} data-act="mark-paid" data-md="${esc(o.md.id)}" data-id="${esc(id)}" title="Als bezahlt markieren">${nameHtml(id)} ✓</button>`).join("")}</div></div>`).join("");
   const led = [...S.ledger].sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.createdAt||0)-(a.createdAt||0)).map(e => {
-    const isCost = e.type==="cost";
-    const title = isCost ? `${esc(e.title||"Kosten")} <span class="muted">· geteilt durch ${(e.players||[]).length}</span>` : `${esc(pname(e.playerId))} hat eingezahlt`;
+    const isCost = e.type==="cost", isTr = e.type==="transfer";
+    const title = isCost ? `${esc(e.title||"Kosten")} <span class="muted">· geteilt durch ${(e.players||[]).length}</span>`
+      : isTr ? `${nameHtml(e.from)} → ${nameHtml(e.to)} <span class="muted">· Umbuchung</span>`
+      : `${nameHtml(e.playerId)} hat eingezahlt`;
     const armed = S.armed === "led:"+e.id;
     return `<div class="li"><div><div>${title}</div><div class="meta">${esc(fmtDate(e.date))}${e.note?" · "+esc(e.note):""}</div></div>
-      <div class="row"><span class="num" style="font-weight:600;${isCost?"color:var(--bad)":"color:var(--good)"}">${isCost?"−":"+"}${eur.format(num(e.amount))}</span>
+      <div class="row"><span class="num" style="font-weight:600;${isTr?"color:var(--info)":isCost?"color:var(--bad)":"color:var(--good)"}">${isTr?"⇄ ":isCost?"−":"+"}${eur.format(num(e.amount))}</span>
       ${canWrite()?`<button class="btn sm danger ${armed?"armed":""}" data-act="del-led" data-id="${esc(e.id)}">${armed?"Wirklich löschen?":"Löschen"}</button>`:""}</div></div>`;
   }).join("");
   return `
@@ -528,9 +538,9 @@ function viewCash(){
     <div class="tile"><div class="k">Kosten gesamt</div><div class="v">${eur.format(F.total)}</div></div>
     <div class="tile"><div class="k">Eingezahlt</div><div class="v">${eur.format(F.paidTotal)}</div></div>
   </div>
-  ${canWrite()?`<div class="row"><button class="btn primary" data-act="new-pay" id="btnNewPay">+ Zahlung erfassen</button><button class="btn" data-act="new-cost" id="btnNewCost">+ Sonstige Kosten</button></div>`:""}
+  ${canWrite()?`<div class="row"><button class="btn primary" data-act="new-pay" id="btnNewPay">+ Zahlung erfassen</button><button class="btn" data-act="new-transfer" id="btnNewTr">+ Umbuchung</button><button class="btn" data-act="new-cost" id="btnNewCost">+ Sonstige Kosten</button></div>`:""}
   <section class="card"><h2>Kontostand pro Spieler</h2><div class="list">${rows}</div>
-    <p class="muted small" style="margin:8px 0 0">Platzkosten eines Spieltags werden gleichmäßig auf die Teilnehmer verteilt. „Begleichen“ trägt eine Zahlung über den offenen Betrag ein.</p></section>
+    <p class="muted small" style="margin:8px 0 0">Platzkosten eines Spieltags werden gleichmäßig auf die Teilnehmer verteilt. Übernimmt ein Spieler die Kosten eines Gasts, landet dessen Anteil auf seinem Konto. „Begleichen“ trägt eine Zahlung über den offenen Betrag ein.</p></section>
   ${F.guestRows.length ? `<section class="card"><h2>Gäste</h2><div class="list">${F.guestRows.map(x => `<div class="li"><div><div class="pname">${esc(pname(x.id))}</div><div class="meta num">Anteil ${eur.format(x.owed)} · bezahlt ${eur.format(x.paid)}</div></div>
     <div class="row">${balPill(x.bal)}${canWrite() && x.bal < -0.004 ? `<button class="btn sm" data-act="settle" data-id="${esc(x.id)}" data-amt="${-x.bal}">Begleichen</button>`:""}</div></div>`).join("")}</div></section>` : ""}
   <section class="card"><h2>Offene Spieltagsbeiträge</h2>${openMd ? `<p class="muted small" style="margin:0 0 4px">Tippe auf einen Namen, sobald der Anteil bezahlt ist.</p><div class="list">${openMd}</div>` : `<div class="muted">Alle Spieltage sind bezahlt.</div>`}</section>
@@ -564,7 +574,7 @@ function openModal(kind, draft){
 function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = true; }
 function renderModal(first){
   const body = $("sheetBody"); const top = body.scrollTop;
-  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport}[S.modal];
+  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer}[S.modal];
   if(!fn) return;
   const {title, html, foot} = fn();
   $("sheetTitle").textContent = title; body.innerHTML = html; $("sheetFoot").innerHTML = foot;
@@ -601,7 +611,8 @@ function modalMd(){
       ${d.participants.length>4?`<div class="small" style="color:var(--bad)">Bitte genau 4 Spieler wählen.</div>`:""}</div>
     <div class="field"><span class="lbl">Gäste</span>
       ${[...guests(), ...draftGuests()].length ? `<div class="chips">${[...guests(), ...draftGuests()].map(g => `<button class="chip" data-act="md-part" data-id="${esc(g.id)}" aria-pressed="${d.participants.includes(g.id)}">${esc(g.name)}<span class="gtag">Gast</span></button>`).join("")}</div>` : ""}
-      <div class="prow"><input class="input" id="f-guest" data-f="guestName" value="${esc(d.guestName||"")}" placeholder="Name des Gasts" autocomplete="off"><button class="btn sm" data-act="md-add-guest" id="btnAddGuest" style="white-space:nowrap">+ Gast</button></div>
+      <div class="prow"><input class="input" id="f-guest" data-f="guestName" value="${esc(d.guestName||"")}" placeholder="Name des Gasts" autocomplete="off"></div>
+      <div class="prow"><select class="input" id="f-ghost" data-f="guestHost" aria-label="Wer zahlt für den Gast?">${hostOpts(d.guestHost||"")}</select><button class="btn sm" data-act="md-add-guest" id="btnAddGuest" style="white-space:nowrap">+ Gast</button></div>
     </div>
     <div class="field"><span class="lbl">Runden · je ein Satz</span>
       ${matches || `<div class="muted small">${four ? "Keine Runden. Erzeuge die drei Standardrunden." : "Wähle 4 Spieler, dann werden die drei Runden automatisch angelegt: jeder spielt einmal mit jedem."}</div>`}
@@ -621,7 +632,7 @@ function modalMd(){
 function modalSettings(){
   const d = S.draft;
   const used = new Set(); S.matchdays.forEach(md => { (md.participants||[]).forEach(x=>used.add(x)); (md.matches||[]).forEach(m=>[...(m.a||[]),...(m.b||[])].forEach(x=>used.add(x))); });
-  S.ledger.forEach(e => { if(e.playerId) used.add(e.playerId); (e.players||[]).forEach(x=>used.add(x)); });
+  S.ledger.forEach(e => { [e.playerId, e.from, e.to].forEach(x => x && used.add(x)); (e.players||[]).forEach(x=>used.add(x)); });
   return {
     title: S.config ? "Liga bearbeiten" : "Liga einrichten",
     html: `
@@ -636,6 +647,7 @@ function modalSettings(){
     </div>
     ${d.guests.length ? `<div class="field"><span class="lbl">Gäste</span>
       ${d.guests.map((g,i) => `<div class="prow"><input class="input" id="s-g${i}" data-gf="${i}" value="${esc(g.name)}" aria-label="Name Gast ${i+1}">
+        <select class="input" id="s-gh${i}" data-gh="${i}" aria-label="Wer zahlt für ${esc(g.name)}?" style="max-width:48%">${hostOpts(g.host||"")}</select>
         ${used.has(g.id) ? `<span class="muted small" style="white-space:nowrap">hat Einträge</span>` : `<button class="btn sm" data-act="s-del-guest" data-i="${i}">Entfernen</button>`}</div>`).join("")}</div>` : ""}
     <div class="grid2">
       <div class="field"><label for="s-cost">Platzkosten pro Spieltag (€)</label><input class="input" inputmode="decimal" id="s-cost" data-f="defaultCost" value="${esc(d.defaultCost)}"></div>
@@ -668,6 +680,23 @@ function modalCost(){
     foot:`<span></span><button class="btn primary" data-act="cost-save" id="btnSaveCost">Kosten speichern</button>` };
 }
 
+function modalTransfer(){
+  const d = S.draft; const pool = [...players(), ...guests()].map(p=>p.id); const amt = num(d.amount);
+  const hint = d.from && d.to && amt>0 && d.from!==d.to ? `<div class="notice small">${esc(pname(d.from))} gibt ${esc(pname(d.to))} ${eur.format(amt)}. Konto ${esc(pname(d.from))}: +${eur.format(amt)}, Konto ${esc(pname(d.to))}: −${eur.format(amt)}.</div>` : "";
+  return { title:"Umbuchung zwischen Spielern", html:`
+    <p class="muted small" style="margin:0">Für Geld, das direkt zwischen zwei Spielern fließt, z. B. wenn einer den Anteil eines anderen ausgelegt hat und es zurückbekommt, oder um Guthaben zu übertragen.</p>
+    <div class="grid2">
+      <div class="field"><label for="t-from">Wer gibt?</label><select class="input" id="t-from" data-f="from" data-rerender="1">${playerOpts(d.from, pool)}</select></div>
+      <div class="field"><label for="t-to">An wen?</label><select class="input" id="t-to" data-f="to" data-rerender="1">${playerOpts(d.to, pool)}</select></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label for="t-amt">Betrag (€)</label><input class="input" inputmode="decimal" id="t-amt" data-f="amount" data-rerender="1" value="${esc(d.amount)}"></div>
+      <div class="field"><label for="t-date">Datum</label><input class="input" type="date" id="t-date" data-f="date" value="${esc(d.date)}"></div>
+    </div>
+    <div class="field"><label for="t-note">Notiz</label><input class="input" id="t-note" data-f="note" value="${esc(d.note)}" placeholder="optional"></div>
+    ${hint}`,
+    foot:`<span></span><button class="btn primary" data-act="tr-save" id="btnSaveTr">Umbuchung speichern</button>` };
+}
 function modalImport(){
   return { title:"Daten importieren", html:`<p class="muted small" style="margin:0">Füge hier den Inhalt der Export-Datei ein. Vorhandene Einträge mit gleicher Kennung werden überschrieben.</p>
     <div class="field"><label for="i-json">Export-Daten (JSON)</label><textarea class="input" id="i-json" data-f="json" spellcheck="false">${esc(S.draft.json)}</textarea></div>`,
@@ -740,7 +769,7 @@ async function saveSettings(){
   const d = S.draft;
   const ps = d.players.map(p => ({id:p.id, name:(p.name||"").trim()})).filter(p => p.name);
   if(ps.length<4){ toast("Bitte mindestens 4 Spieler eintragen."); return; }
-  const gs = d.guests.map(g => ({id:g.id, name:(g.name||"").trim()})).filter(g => g.name);
+  const gs = d.guests.map(g => { const o = {id:g.id, name:(g.name||"").trim()}; if(g.host) o.host = g.host; return o; }).filter(g => g.name);
   const body = {name:(d.name||"").trim()||"Padel-Liga", season:(d.season||"").trim(), players:ps, guests:gs, defaultCost:r2(num(d.defaultCost)), defaultLocation:(d.defaultLocation||"").trim(),
     minPct:Math.max(0, Math.min(100, Math.round(num(d.minPct)))), updatedAt:Date.now()};
   const ok = await write(() => S.db.doc("league/config").set(body));
@@ -752,6 +781,14 @@ async function savePay(){
   if(!(amt>0)){ toast("Bitte einen Betrag über 0 € eingeben."); return; }
   const ok = await write(() => S.db.collection("ledger").doc(d.id).set({type:"payment", playerId:d.playerId, amount:amt, date:d.date||today(), note:(d.note||"").trim(), createdAt:Date.now()}));
   if(ok){ closeModal(); toast("Zahlung gespeichert"); }
+}
+async function saveTransfer(){
+  const d = S.draft; const amt = r2(num(d.amount));
+  if(!d.from || !d.to){ toast("Bitte beide Spieler wählen."); return; }
+  if(d.from===d.to){ toast("Bitte zwei verschiedene Spieler wählen."); return; }
+  if(!(amt>0)){ toast("Bitte einen Betrag über 0 € eingeben."); return; }
+  const ok = await write(() => S.db.collection("ledger").doc(d.id).set({type:"transfer", from:d.from, to:d.to, amount:amt, date:d.date||today(), note:(d.note||"").trim(), createdAt:Date.now()}));
+  if(ok){ closeModal(); toast("Umbuchung gespeichert"); }
 }
 async function saveCost(){
   const d = S.draft; const amt = r2(num(d.amount));
@@ -808,7 +845,7 @@ document.addEventListener("click", e => {
       const low = nm.toLowerCase();
       if(players().some(p => p.name.trim().toLowerCase()===low)){ toast(nm+" ist schon Liga-Spieler."); break; }
       let g = [...guests(), ...draftGuests()].find(x => x.name.trim().toLowerCase()===low);
-      if(!g){ g = {id:"g"+uid(), name:nm}; d.newGuests.push(g); }
+      if(!g){ g = {id:"g"+uid(), name:nm}; if(d.guestHost) g.host = d.guestHost; d.newGuests.push(g); }
       d.guestName = "";
       if(!d.participants.includes(g.id)){
         d.participants.push(g.id);
@@ -828,6 +865,8 @@ document.addEventListener("click", e => {
     case "new-cost": openModal("cost", {id:uid(), title:"", amount:"", date:today(), players:players().map(p=>p.id)}); break;
     case "cost-player": { const i = d.players.indexOf(id); if(i>=0) d.players.splice(i,1); else d.players.push(id); renderModal(); break; }
     case "cost-save": guarded(saveCost); break;
+    case "new-transfer": openModal("tr", {id:uid(), from:"", to:"", amount:"", date:today(), note:""}); break;
+    case "tr-save": guarded(saveTransfer); break;
     case "settle": {
       const amt = r2(num(el.dataset.amt));
       guarded(async()=>{ const ok = await write(()=>S.db.collection("ledger").doc(uid()).set({type:"payment", playerId:id, amount:amt, date:today(), note:"Ausgleich offener Betrag", createdAt:Date.now()})); if(ok) toast(`${pname(id)}: ${eur.format(amt)} eingetragen`); });
@@ -853,7 +892,8 @@ document.addEventListener("input", e => {
 document.addEventListener("change", e => {
   const t = e.target; const d = S.draft; if(!d) return;
   if(t.dataset.mf){ const [i,side,k] = t.dataset.mf.split(":"); d.matches[+i][side][+k] = t.value; }
-  else if(t.dataset.f && t.tagName==="SELECT"){ d[t.dataset.f] = t.value; }
+  else if(t.dataset.gh){ d.guests[+t.dataset.gh].host = t.value || null; }
+  else if(t.dataset.f && t.tagName==="SELECT"){ d[t.dataset.f] = t.value; if(t.dataset.rerender) renderModal(); }
 });
 function updateShareLabels(){
   // Anteil-Anzeige aktualisieren, ohne das Eingabefeld neu zu zeichnen
