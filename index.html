@@ -332,7 +332,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.15";
+const APP_VERSION = "2026-11-11.16";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -993,17 +993,23 @@ function downloadIcs(ev){
   const a = document.createElement("a"); a.href = url; a.download = `padel-${ev.key}.ics`; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
+const SUB_HOST = "padel-liga.github.io/app/termine.ics";
 function modalCal(){
   const ev = calEvent(S.draft.key);
   const when = `${ev.start.toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"})} · ${sched().start}–${sched().end} Uhr`;
-  const apple = `<a class="btn ${isIOS()?"primary":""}" href="${esc(icsDataUrl(ev))}" target="_blank" rel="noopener" style="text-decoration:none;${isIOS()?"":"color:var(--ink)"}" id="calApple">iPhone / Apple Kalender</a>`;
-  const google = `<a class="btn ${isAndroid()?"primary":""}" href="${esc(googleCalUrl(ev))}" target="_blank" rel="noopener" style="text-decoration:none;${isAndroid()?"":"color:var(--ink)"}" id="calGoogle">Google Kalender</a>`;
-  const file = `<button class="btn" data-act="cal-ics" id="calIcs">Andere Kalender-App (.ics-Datei)</button>`;
+  const subApple = `<a class="btn ${isAndroid()?"":"primary"}" href="webcal://${SUB_HOST}" style="text-decoration:none;${isAndroid()?"color:var(--ink)":""}" id="calSubApple">iPhone / Apple: alle Termine abonnieren</a>`;
+  const subGoogle = `<a class="btn ${isAndroid()?"primary":""}" href="https://calendar.google.com/calendar/render?cid=${encodeURIComponent("webcal://"+SUB_HOST)}" target="_blank" rel="noopener" style="text-decoration:none;${isAndroid()?"":"color:var(--ink)"}" id="calSubGoogle">Google Kalender: alle Termine abonnieren</a>`;
+  const one = `<a class="btn" href="${esc(googleCalUrl(ev))}" target="_blank" rel="noopener" style="text-decoration:none;color:var(--ink)" id="calGoogle">Google Kalender</a>
+    <button class="btn" data-act="cal-ics" id="calIcs">.ics-Datei laden</button>`;
   return { title:"In Kalender eintragen", html:`
     <div class="card" style="padding:14px"><div class="pname">${esc(ev.title)}</div><div class="small muted">${esc(when)}${ev.loc?" · "+esc(ev.loc):""}</div>
       <div class="small" style="margin-top:8px;white-space:pre-line;color:var(--ink-2)">${esc(ev.desc.split("\n").filter(l=>!l.startsWith("App:")).join("\n"))}</div></div>
-    <div style="display:grid;gap:8px">${isAndroid() ? google + apple : apple + google}${file}</div>
-    <p class="note" style="margin:0">Mit Erinnerung 1 Stunde vorher. ${isIOS() ? "Auf dem iPhone öffnet sich eine Vorschau, dort auf „Hinzufügen“ tippen." : isAndroid() ? "Auf Android öffnet sich Google Kalender, dort auf „Speichern“ tippen." : ""} Ändern sich danach die Teams, wird der Kalendereintrag nicht automatisch angepasst.</p>`,
+    <div class="sect"><h3>Empfohlen: alle Spieltermine abonnieren</h3>
+      <div style="display:grid;gap:8px">${isAndroid() ? subGoogle + subApple : subApple + subGoogle}</div>
+      <p class="note" style="margin:0">Einmal abonnieren, dann stehen alle Termine (${[1,2,3,4,5,6,0].filter(x=>sched().days.includes(x)).map(x=>WD[x]).join(" + ")}, ${sched().start}–${sched().end} Uhr) automatisch im Kalender, mit Erinnerung 1 Stunde vorher. ${isIOS() ? "Auf dem iPhone fragt der Kalender nach, dort auf „Abonnieren“ und dann „Hinzufügen“ tippen." : ""}</p></div>
+    <div class="sect"><h3>Nur diesen Spieltag (mit Teams)</h3>
+      <div class="grid2">${one}</div>
+      <p class="note" style="margin:0">${isIOS() ? "Die .ics-Datei klappt auf dem iPhone nur in Safari, nicht in der Homescreen-App: Datei laden, öffnen und „Hinzufügen“ tippen." : "Ändern sich danach die Teams, wird der Eintrag nicht automatisch angepasst."}</p></div>`,
     foot:"" };
 }
 
