@@ -169,6 +169,8 @@ td.pname{white-space:normal;min-width:90px}
 .prow{display:flex;gap:8px;align-items:center}
 
 textarea.input{min-height:160px;font-family:ui-monospace,monospace;font-size:13px}
+.gtag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:1px 5px;border-radius:4px;background:var(--soft);color:var(--muted);vertical-align:2px;margin-left:3px}
+.chip .gtag{background:transparent;color:inherit;opacity:.75}
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;z-index:30;max-width:calc(100% - 32px);font-size:15px}
 .toast[hidden]{display:none}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}}
@@ -257,7 +259,12 @@ const num = v => { const n = parseFloat(String(v ?? "").replace(",", ".")); retu
 const r2 = x => Math.round(x*100)/100;
 const today = () => { const d = new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,10); };
 const players = () => Array.isArray(S.config?.players) ? S.config.players : [];
-const pname = id => players().find(p => p.id === id)?.name || "Ehemalig";
+const guests = () => Array.isArray(S.config?.guests) ? S.config.guests : [];
+const draftGuests = () => Array.isArray(S.draft?.newGuests) ? S.draft.newGuests : [];
+const isGuest = id => guests().some(g => g.id === id) || draftGuests().some(g => g.id === id);
+const pname = id => players().find(p => p.id === id)?.name || guests().find(g => g.id === id)?.name || draftGuests().find(g => g.id === id)?.name || "Ehemalig";
+const gtag = id => isGuest(id) ? `<span class="gtag">Gast</span>` : "";
+const nameHtml = id => esc(pname(id)) + gtag(id);
 const fmtDate = (d, long) => { if(!d) return "Ohne Datum"; const x = new Date(d+"T12:00:00"); return isNaN(x) ? d : x.toLocaleDateString("de-DE", long ? {weekday:"long",day:"numeric",month:"long",year:"numeric"} : {day:"2-digit",month:"2-digit",year:"numeric"}); };
 const byDate = (a,b) => (a.date||"").localeCompare(b.date||"") || (a.createdAt||0)-(b.createdAt||0);
 const canWrite = () => !!S.db && !S.readOnly;
@@ -299,9 +306,9 @@ function dayRanking(md){
   const top = rows[0]; const winners = top && top.sp ? rows.filter(x => x.s+x.u/2===top.s+top.u/2 && x.gd===top.gd).map(x=>x.id) : [];
   return {rows, winners};
 }
-function standings(){
+function standings(pool){
   const t = {};
-  players().forEach(p => t[p.id] = {id:p.id,sp:0,s:0,u:0,n:0,gw:0,gl:0,days:0,dayWins:0,form:[]});
+  (pool || players()).forEach(p => t[p.id] = {id:p.id,sp:0,s:0,u:0,n:0,gw:0,gl:0,days:0,dayWins:0,form:[]});
   for(const md of [...S.matchdays].sort(byDate)){
     const any = (md.matches||[]).some(m => result(m).played);
     if(any) (md.participants||[]).forEach(id => t[id] && t[id].days++);
@@ -328,7 +335,7 @@ function pairStats(){
   for(const md of S.matchdays) for(const m of (md.matches||[])){
     const r = result(m); if(!r.played) continue;
     for(const [ids,side] of [[m.a,"a"],[m.b,"b"]]){
-      if(!ids || ids.length!==2) continue;
+      if(!ids || ids.length!==2 || ids.some(isGuest)) continue;
       const k = [...ids].sort().join("+");
       map[k] ||= {ids:[...ids].sort(), sp:0, s:0};
       map[k].sp++; if(r.w===side) map[k].s++;
@@ -337,7 +344,7 @@ function pairStats(){
   return Object.values(map).sort((a,b) => b.s/b.sp - a.s/a.sp || b.sp-a.sp);
 }
 function finance(){
-  const f = {}; players().forEach(p => f[p.id] = {id:p.id, owed:0, paid:0});
+  const f = {}; [...players(), ...guests()].forEach(p => f[p.id] = {id:p.id, owed:0, paid:0});
   let total=0, paidTotal=0; const openMd = [];
   for(const md of [...S.matchdays].sort(byDate)){
     const cost = num(md.courtCost);
@@ -361,9 +368,11 @@ function finance(){
       f[e.playerId].paid += amt; paidTotal += amt;
     }
   }
-  const rows = Object.values(f).map(x => ({...x, bal: r2(x.paid - x.owed)}));
-  const open = rows.reduce((s,x) => s + Math.max(0, -x.bal), 0);
-  return {rows, total:r2(total), paidTotal:r2(paidTotal), open:r2(open), openMd};
+  const all = Object.values(f).map(x => ({...x, bal: r2(x.paid - x.owed)}));
+  const open = all.reduce((s,x) => s + Math.max(0, -x.bal), 0);
+  const rows = all.filter(x => !isGuest(x.id));
+  const guestRows = all.filter(x => isGuest(x.id) && (x.owed>0 || x.paid>0));
+  return {rows, guestRows, total:r2(total), paidTotal:r2(paidTotal), open:r2(open), openMd};
 }
 function balPill(b){
   if(Math.abs(b) < 0.005) return `<span class="pill good">Ausgeglichen</span>`;
@@ -446,15 +455,24 @@ function viewTable(){
       <tbody>${rows}</tbody></table></div>
     <p class="muted small" style="margin:10px 0 0">Jeder wird einzeln gewertet, egal mit wem er zusammen gespielt hat. Sortiert wird nach Siegquote, bei Gleichstand nach Spieldifferenz pro Match. In die Wertung kommt, wer bei mindestens ${minPct()} % der Spieltage dabei war (aktuell ${need}).</p>
   </section>
+  ${guestTable(pct, sgn)}
   <section class="card"><h2>Paarungen</h2>
-    <div class="tablewrap"><table><thead><tr><th class="l">Team</th><th>Sp</th><th>Siege</th><th>Quote</th></tr></thead><tbody>${pairRows}</tbody></table></div>
+    <div class="tablewrap"><table><thead><tr><th class="l">Team</th><th>Sp</th><th>Siege</th><th>Quote</th></tr></thead><tbody>${pairRows || `<tr><td class="l muted" colspan="4">Noch keine Paarungen nur aus Liga-Spielern.</td></tr>`}</tbody></table></div>
   </section>`;
 }
 
 const roundLabel = (m,i) => m.extra ? "Extra-Runde" : `Runde ${i+1}`;
+function guestTable(pct, sgn){
+  const gs = standings(guests()).filter(x => x.sp > 0).sort((a,b) => b.quote-a.quote || b.gdpm-a.gdpm || b.sp-a.sp);
+  if(!gs.length) return "";
+  const rows = gs.map(x => `<tr><td class="l pname">${esc(pname(x.id))}</td><td>${x.days}</td><td>${x.sp}</td><td>${x.s}:${x.n}</td><td class="pts">${pct(x.quote)}</td><td class="${x.gdpm>0?"pos":x.gdpm<0?"neg":""}">${sgn(x.gdpm)}</td></tr>`).join("");
+  return `<section class="card"><h2>Gästetabelle</h2>
+    <div class="tablewrap"><table><thead><tr><th class="l">Gast</th><th title="Spieltage dabei">Tage</th><th title="Matches">Sp</th><th title="Siege : Niederlagen">S:N</th><th>Quote</th><th title="Spieldifferenz pro Match">± / Sp</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="muted small" style="margin:10px 0 0">Gäste zählen nicht in der Liga-Tabelle. Spiele mit Gästen zählen für die Liga-Spieler ganz normal.</p></section>`;
+}
 function matchLine(m, i){
   const r = result(m);
-  const ta = (m.a||[]).map(pname).map(esc).join(" / "), tb = (m.b||[]).map(pname).map(esc).join(" / ");
+  const ta = (m.a||[]).map(nameHtml).join(" / "), tb = (m.b||[]).map(nameHtml).join(" / ");
   const sets = (m.sets||[]).filter(s => s?.a!=null && s?.b!=null);
   const score = !r.played ? `<span class="muted small">offen</span>`
     : sets.length===1 ? `<b>${sets[0].a}:${sets[0].b}</b>`
@@ -465,7 +483,7 @@ function matchLine(m, i){
 }
 function dayLine(md){
   const dr = dayRanking(md); if(!dr.winners.length) return "";
-  const names = dr.winners.map(pname).map(esc).join(" & ");
+  const names = dr.winners.map(nameHtml).join(" & ");
   const rest = dr.rows.filter(x=>x.sp).map(x => `${esc(pname(x.id))} ${x.s}/${x.sp} (${x.gd>0?"+":""}${x.gd})`).join(" · ");
   return `<div class="row"><span class="pill" style="background:var(--ball);color:var(--ball-ink)">Tagessieg: ${names}</span><span class="muted small">${rest}</span></div>`;
 }
@@ -480,7 +498,7 @@ function viewMatchdays(){
     const payPill = cost>0 && parts.length ? (paidN===parts.length ? `<span class="pill good">${eur.format(cost)} · alle bezahlt</span>` : `<span class="pill bad">${eur.format(cost)} · ${paidN}/${parts.length} bezahlt</span>`) : `<span class="pill neutral">keine Platzkosten</span>`;
     return `<section class="card md">
       <div class="md-head"><div><div class="md-no">Spieltag ${nums[md.id]}</div><div class="md-date">${esc(fmtDate(md.date,true))}</div>
-        <div class="muted small">${md.location?esc(md.location)+" · ":""}${parts.map(pname).map(esc).join(", ")||"Keine Teilnehmer"}</div></div>
+        <div class="muted small">${md.location?esc(md.location)+" · ":""}${parts.map(nameHtml).join(", ")||"Keine Teilnehmer"}</div></div>
         <div class="row">${payPill}${canWrite()?`<button class="btn sm" data-act="edit-md" data-id="${esc(md.id)}">Bearbeiten</button>`:""}</div></div>
       ${dayLine(md)}
       ${(md.matches||[]).length ? (md.matches||[]).map((m,i)=>matchLine(m,i)).join("") : `<div class="muted small">Noch keine Matches eingetragen.</div>`}
@@ -495,7 +513,7 @@ function viewCash(){
     <div class="row">${balPill(x.bal)}${canWrite() && x.bal < -0.004 ? `<button class="btn sm" data-act="settle" data-id="${esc(x.id)}" data-amt="${-x.bal}">Begleichen</button>`:""}</div></div>`).join("");
   const openMd = F.openMd.slice().reverse().map(o => `<div class="li" style="align-items:flex-start;flex-direction:column">
       <div class="small"><b>Spieltag ${nums[o.md.id]}</b> · ${esc(fmtDate(o.md.date))} · je <span class="num">${eur.format(o.share)}</span></div>
-      <div class="chips">${o.open.map(id => `<button class="chip paid" aria-pressed="false" ${canWrite()?"":"disabled"} data-act="mark-paid" data-md="${esc(o.md.id)}" data-id="${esc(id)}" title="Als bezahlt markieren">${esc(pname(id))} ✓</button>`).join("")}</div></div>`).join("");
+      <div class="chips">${o.open.map(id => `<button class="chip paid" aria-pressed="false" ${canWrite()?"":"disabled"} data-act="mark-paid" data-md="${esc(o.md.id)}" data-id="${esc(id)}" title="Als bezahlt markieren">${nameHtml(id)} ✓</button>`).join("")}</div></div>`).join("");
   const led = [...S.ledger].sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.createdAt||0)-(a.createdAt||0)).map(e => {
     const isCost = e.type==="cost";
     const title = isCost ? `${esc(e.title||"Kosten")} <span class="muted">· geteilt durch ${(e.players||[]).length}</span>` : `${esc(pname(e.playerId))} hat eingezahlt`;
@@ -513,6 +531,8 @@ function viewCash(){
   ${canWrite()?`<div class="row"><button class="btn primary" data-act="new-pay" id="btnNewPay">+ Zahlung erfassen</button><button class="btn" data-act="new-cost" id="btnNewCost">+ Sonstige Kosten</button></div>`:""}
   <section class="card"><h2>Kontostand pro Spieler</h2><div class="list">${rows}</div>
     <p class="muted small" style="margin:8px 0 0">Platzkosten eines Spieltags werden gleichmäßig auf die Teilnehmer verteilt. „Begleichen“ trägt eine Zahlung über den offenen Betrag ein.</p></section>
+  ${F.guestRows.length ? `<section class="card"><h2>Gäste</h2><div class="list">${F.guestRows.map(x => `<div class="li"><div><div class="pname">${esc(pname(x.id))}</div><div class="meta num">Anteil ${eur.format(x.owed)} · bezahlt ${eur.format(x.paid)}</div></div>
+    <div class="row">${balPill(x.bal)}${canWrite() && x.bal < -0.004 ? `<button class="btn sm" data-act="settle" data-id="${esc(x.id)}" data-amt="${-x.bal}">Begleichen</button>`:""}</div></div>`).join("")}</div></section>` : ""}
   <section class="card"><h2>Offene Spieltagsbeiträge</h2>${openMd ? `<p class="muted small" style="margin:0 0 4px">Tippe auf einen Namen, sobald der Anteil bezahlt ist.</p><div class="list">${openMd}</div>` : `<div class="muted">Alle Spieltage sind bezahlt.</div>`}</section>
   <section class="card"><h2>Zahlungen &amp; sonstige Kosten</h2>${led?`<div class="list">${led}</div>`:`<div class="muted">Noch keine Einträge. Hier landen Einzahlungen (z.&nbsp;B. Vorkasse) und Kosten wie neue Bälle.</div>`}</section>`;
 }
@@ -528,6 +548,8 @@ function viewSettings(){
       <div><div class="lbl">Ort (Standard)</div>${esc(c.defaultLocation||"–")}</div>
     </div></section>
   <section class="card"><h2>Spieler</h2><div class="list">${rows}</div></section>
+  ${guests().length ? `<section class="card"><h2>Gäste</h2><div class="list">${(() => { const gs = standings(guests()); return guests().map(g => { const x = gs.find(s=>s.id===g.id); return `<div class="li"><div class="pname">${esc(g.name)}</div><div class="meta">${x?.days||0} Spieltage · ${x?.sp||0} Matches</div></div>`; }).join(""); })()}</div>
+    <p class="muted small" style="margin:8px 0 0">Gäste legst du beim Spieltag an. Umbenennen geht über „Bearbeiten“.</p></section>` : ""}
   <section class="card"><h2>Liga-Link</h2>
     <p class="muted small" style="margin:0 0 10px">Jeder mit diesem Link kann alles sehen und eintragen. Teile ihn nur in eurer Gruppe.</p>
     <div class="row"><input class="input" id="shareLink" readonly value="${esc(shareLink())}" style="flex:1;min-width:0"><button class="btn sm" data-act="copy-link" id="btnCopy">Kopieren</button></div>
@@ -549,7 +571,7 @@ function renderModal(first){
   if(first) body.scrollTop = 0; else body.scrollTop = top;
 }
 function playerOpts(sel, pool){
-  return `<option value="">– wählen –</option>` + pool.map(id => `<option value="${esc(id)}" ${id===sel?"selected":""}>${esc(pname(id))}</option>`).join("");
+  return `<option value="">– wählen –</option>` + pool.map(id => `<option value="${esc(id)}" ${id===sel?"selected":""}>${esc(pname(id))}${isGuest(id)?" (Gast)":""}</option>`).join("");
 }
 function modalMd(){
   const d = S.draft; const pool = d.participants.length ? d.participants : players().map(p=>p.id);
@@ -577,6 +599,10 @@ function modalMd(){
     <div class="field"><label for="f-loc">Ort / Platz</label><input class="input" id="f-loc" data-f="location" value="${esc(d.location)}" placeholder="z. B. Padel Club, Platz 2"></div>
     <div class="field"><span class="lbl">Wer war dabei? · ${d.participants.length}/4</span><div class="chips">${players().map(p => `<button class="chip" data-act="md-part" data-id="${esc(p.id)}" aria-pressed="${d.participants.includes(p.id)}">${esc(p.name)}</button>`).join("")}</div>
       ${d.participants.length>4?`<div class="small" style="color:var(--bad)">Bitte genau 4 Spieler wählen.</div>`:""}</div>
+    <div class="field"><span class="lbl">Gäste</span>
+      ${[...guests(), ...draftGuests()].length ? `<div class="chips">${[...guests(), ...draftGuests()].map(g => `<button class="chip" data-act="md-part" data-id="${esc(g.id)}" aria-pressed="${d.participants.includes(g.id)}">${esc(g.name)}<span class="gtag">Gast</span></button>`).join("")}</div>` : ""}
+      <div class="prow"><input class="input" id="f-guest" data-f="guestName" value="${esc(d.guestName||"")}" placeholder="Name des Gasts" autocomplete="off"><button class="btn sm" data-act="md-add-guest" id="btnAddGuest" style="white-space:nowrap">+ Gast</button></div>
+    </div>
     <div class="field"><span class="lbl">Runden · je ein Satz</span>
       ${matches || `<div class="muted small">${four ? "Keine Runden. Erzeuge die drei Standardrunden." : "Wähle 4 Spieler, dann werden die drei Runden automatisch angelegt: jeder spielt einmal mit jedem."}</div>`}
       <div class="row">
@@ -585,7 +611,7 @@ function modalMd(){
       </div>
     </div>
     <div class="field"><span class="lbl">Bezahlt${share?` · je ${eur.format(share)}`:""}</span>
-      ${d.participants.length ? `<div class="chips">${d.participants.map(id => `<button class="chip paid" data-act="md-paid" data-id="${esc(id)}" aria-pressed="${!!d.paid[id]}">${esc(pname(id))}${d.paid[id]?" ✓":""}</button>`).join("")}</div>` : `<div class="muted small">Erst Teilnehmer wählen.</div>`}
+      ${d.participants.length ? `<div class="chips">${d.participants.map(id => `<button class="chip paid" data-act="md-paid" data-id="${esc(id)}" aria-pressed="${!!d.paid[id]}">${nameHtml(id)}${d.paid[id]?" ✓":""}</button>`).join("")}</div>` : `<div class="muted small">Erst Teilnehmer wählen.</div>`}
     </div>
     <div class="field"><label for="f-note">Notiz</label><input class="input" id="f-note" data-f="note" value="${esc(d.note)}" placeholder="optional"></div>`,
     foot: `${d.isNew ? "<span></span>" : `<button class="btn danger ${armed?"armed":""}" data-act="md-delete" id="btnDelMd">${armed?"Wirklich löschen?":"Spieltag löschen"}</button>`}
@@ -608,6 +634,9 @@ function modalSettings(){
         ${used.has(p.id) ? `<span class="muted small" style="white-space:nowrap">hat Einträge</span>` : `<button class="btn sm" data-act="s-del-player" data-i="${i}">Entfernen</button>`}</div>`).join("")}
       <div><button class="btn sm" data-act="s-add-player" id="btnAddPlayer">+ Spieler</button></div>
     </div>
+    ${d.guests.length ? `<div class="field"><span class="lbl">Gäste</span>
+      ${d.guests.map((g,i) => `<div class="prow"><input class="input" id="s-g${i}" data-gf="${i}" value="${esc(g.name)}" aria-label="Name Gast ${i+1}">
+        ${used.has(g.id) ? `<span class="muted small" style="white-space:nowrap">hat Einträge</span>` : `<button class="btn sm" data-act="s-del-guest" data-i="${i}">Entfernen</button>`}</div>`).join("")}</div>` : ""}
     <div class="grid2">
       <div class="field"><label for="s-cost">Platzkosten pro Spieltag (€)</label><input class="input" inputmode="decimal" id="s-cost" data-f="defaultCost" value="${esc(d.defaultCost)}"></div>
       <div class="field"><label for="s-loc">Ort (Standard)</label><input class="input" id="s-loc" data-f="defaultLocation" value="${esc(d.defaultLocation)}"></div>
@@ -619,7 +648,7 @@ function modalSettings(){
 function modalPay(){
   const d = S.draft;
   return { title:"Zahlung erfassen", html:`
-    <div class="field"><label for="p-player">Wer hat bezahlt?</label><select class="input" id="p-player" data-f="playerId">${playerOpts(d.playerId, players().map(p=>p.id))}</select></div>
+    <div class="field"><label for="p-player">Wer hat bezahlt?</label><select class="input" id="p-player" data-f="playerId">${playerOpts(d.playerId, [...players(), ...guests()].map(p=>p.id))}</select></div>
     <div class="grid2">
       <div class="field"><label for="p-amt">Betrag (€)</label><input class="input" inputmode="decimal" id="p-amt" data-f="amount" value="${esc(d.amount)}"></div>
       <div class="field"><label for="p-date">Datum</label><input class="input" type="date" id="p-date" data-f="date" value="${esc(d.date)}"></div>
@@ -699,6 +728,11 @@ async function saveMd(){
   c.matches.forEach(m => [...m.a,...m.b].forEach(p => { if(!parts.includes(p)) parts.push(p); }));
   const paid = {}; parts.forEach(p => { if(d.paid[p]) paid[p] = true; });
   const body = {date:d.date, location:(d.location||"").trim(), courtCost:r2(num(d.courtCost)), participants:parts, matches:c.matches, paid, note:(d.note||"").trim(), createdAt:d.createdAt||Date.now(), updatedAt:Date.now()};
+  const fresh = draftGuests().filter(g => parts.includes(g.id) || Object.keys(d.paid).includes(g.id));
+  if(fresh.length){
+    const okG = await write(() => S.db.doc("league/config").update({guests:[...guests(), ...fresh], updatedAt:Date.now()}));
+    if(!okG) return;
+  }
   const ok = await write(() => S.db.doc("matchdays/"+d.id).set(body));
   if(ok){ closeModal(); toast("Spieltag gespeichert"); }
 }
@@ -706,7 +740,8 @@ async function saveSettings(){
   const d = S.draft;
   const ps = d.players.map(p => ({id:p.id, name:(p.name||"").trim()})).filter(p => p.name);
   if(ps.length<4){ toast("Bitte mindestens 4 Spieler eintragen."); return; }
-  const body = {name:(d.name||"").trim()||"Padel-Liga", season:(d.season||"").trim(), players:ps, defaultCost:r2(num(d.defaultCost)), defaultLocation:(d.defaultLocation||"").trim(),
+  const gs = d.guests.map(g => ({id:g.id, name:(g.name||"").trim()})).filter(g => g.name);
+  const body = {name:(d.name||"").trim()||"Padel-Liga", season:(d.season||"").trim(), players:ps, guests:gs, defaultCost:r2(num(d.defaultCost)), defaultLocation:(d.defaultLocation||"").trim(),
     minPct:Math.max(0, Math.min(100, Math.round(num(d.minPct)))), updatedAt:Date.now()};
   const ok = await write(() => S.db.doc("league/config").set(body));
   if(ok){ closeModal(); toast("Liga gespeichert"); }
@@ -744,28 +779,42 @@ document.addEventListener("click", e => {
     case "open-settings": {
       const c = S.config;
       const ps = c ? players().map(p=>({...p})) : Array.from({length:6},()=>({id:uid(),name:""}));
-      openModal("settings", {name:c?.name||"", season:c?.season||"", players:ps, defaultCost:c?.defaultCost ?? "", defaultLocation:c?.defaultLocation||"", minPct:c?.minPct ?? 50});
+      openModal("settings", {name:c?.name||"", season:c?.season||"", players:ps, defaultCost:c?.defaultCost ?? "", defaultLocation:c?.defaultLocation||"", minPct:c?.minPct ?? 50, guests:guests().map(g=>({...g}))});
       break; }
     case "s-add-player": d.players.push({id:uid(),name:""}); renderModal(); break;
     case "s-del-player": d.players.splice(+el.dataset.i,1); renderModal(); break;
+    case "s-del-guest": d.guests.splice(+el.dataset.i,1); renderModal(); break;
     case "s-save": guarded(saveSettings); break;
     case "new-md":
-      openModal("md", {isNew:true, id:uid(), date:today(), location:S.config?.defaultLocation||"", courtCost:S.config?.defaultCost ? String(S.config.defaultCost) : "", participants:[], matches:[], paid:{}, note:""});
+      openModal("md", {isNew:true, id:uid(), date:today(), location:S.config?.defaultLocation||"", courtCost:S.config?.defaultCost ? String(S.config.defaultCost) : "", participants:[], matches:[], paid:{}, note:"", newGuests:[], guestName:""});
       break;
     case "edit-md": {
       const md = S.matchdays.find(m=>m.id===id); if(!md) return;
       const sets3 = s => { const arr = (s||[]).map(x=>({a:x.a??null,b:x.b??null})); if(!arr.length) arr.push({a:null,b:null}); return arr; };
       openModal("md", {isNew:false, id:md.id, createdAt:md.createdAt, date:md.date||"", location:md.location||"", courtCost:md.courtCost!=null?String(md.courtCost):"", participants:[...(md.participants||[])],
-        matches:(md.matches||[]).map(m=>({id:m.id||uid(), extra:!!m.extra, a:[m.a?.[0]||"",m.a?.[1]||""], b:[m.b?.[0]||"",m.b?.[1]||""], sets:sets3(m.sets)})), paid:{...(md.paid||{})}, note:md.note||""});
+        matches:(md.matches||[]).map(m=>({id:m.id||uid(), extra:!!m.extra, a:[m.a?.[0]||"",m.a?.[1]||""], b:[m.b?.[0]||"",m.b?.[1]||""], sets:sets3(m.sets)})), paid:{...(md.paid||{})}, note:md.note||"", newGuests:[], guestName:""});
       break; }
     case "md-part": {
       const i = d.participants.indexOf(id); if(i>=0) d.participants.splice(i,1); else d.participants.push(id);
-      const order = players().map(p=>p.id); d.participants.sort((x,y)=>order.indexOf(x)-order.indexOf(y));
+      const order = [...players(), ...guests(), ...draftGuests()].map(p=>p.id); d.participants.sort((x,y)=>order.indexOf(x)-order.indexOf(y));
       // Noch ohne Ergebnisse: Runden passend zu den 4 Spielern neu anlegen
       if(d.participants.length===4 && !d.matches.some(hasScore)) d.matches = standardRounds(d.participants);
       else if(d.participants.length!==4 && !d.matches.some(hasScore)) d.matches = [];
       renderModal(); break; }
     case "md-paid": d.paid[id] = !d.paid[id]; renderModal(); break;
+    case "md-add-guest": {
+      const nm = (d.guestName||"").trim().replace(/\s+/g," ");
+      if(!nm){ toast("Bitte einen Namen für den Gast eingeben."); break; }
+      const low = nm.toLowerCase();
+      if(players().some(p => p.name.trim().toLowerCase()===low)){ toast(nm+" ist schon Liga-Spieler."); break; }
+      let g = [...guests(), ...draftGuests()].find(x => x.name.trim().toLowerCase()===low);
+      if(!g){ g = {id:"g"+uid(), name:nm}; d.newGuests.push(g); }
+      d.guestName = "";
+      if(!d.participants.includes(g.id)){
+        d.participants.push(g.id);
+        if(d.participants.length===4 && !d.matches.some(hasScore)) d.matches = standardRounds(d.participants);
+      }
+      renderModal(); break; }
     case "md-std": d.matches = standardRounds(d.participants).concat(d.matches.filter(m=>m.extra)); renderModal(); break;
     case "md-extra": d.matches.push(extraRound(d.participants)); renderModal(); toast("Extra-Runde ausgelost"); break;
     case "md-del-match": d.matches.splice(+el.dataset.i,1); renderModal(); break;
@@ -798,6 +847,7 @@ document.addEventListener("input", e => {
   const t = e.target; const d = S.draft; if(!d) return;
   if(t.dataset.f){ d[t.dataset.f] = t.value; if(t.dataset.rerender) updateShareLabels(); return; }
   if(t.dataset.pf){ d.players[+t.dataset.pf].name = t.value; return; }
+  if(t.dataset.gf){ d.guests[+t.dataset.gf].name = t.value; return; }
   if(t.dataset.sf){ const [i,j,side] = t.dataset.sf.split(":"); const v = t.value.replace(/\D/g,""); if(v!==t.value) t.value = v; d.matches[+i].sets[+j][side] = v==="" ? null : parseInt(v,10); return; }
 });
 document.addEventListener("change", e => {
