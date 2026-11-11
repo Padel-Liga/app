@@ -332,7 +332,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.18";
+const APP_VERSION = "2026-11-11.19";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -483,6 +483,7 @@ function finance(){
     }
   }
   for(const e of S.ledger){
+    if(e.status==="pending") continue;
     const amt = num(e.amount);
     if(e.type==="cost"){
       const ps = (e.players||[]).filter(id => f[id]);
@@ -567,6 +568,7 @@ function render(){
       ${canWrite() ? `<div class="row"><button class="btn primary" data-act="open-settings" id="btnSetup">Liga einrichten</button><button class="btn" data-act="open-import" id="btnImport">Daten aus alter App importieren</button></div>` : ""}</section>`;
   } else if(cfg){
     html += requestsCard();
+    html += confirmCard();
     if(S.view==="tabelle" || S.view==="spieltage") html += missingCard();
     if(S.view==="tabelle") html += pollCard();
     html += ({tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
@@ -1018,9 +1020,25 @@ function modalCal(){
 const bank = () => ppOwner() || cashier();
 function paymentDoc(payer, amt, note, date){
   const b = bank();
+  // Zahlungen an Daniel zählen erst, wenn Daniel sie bestätigt (trägt er selbst ein, gelten sie sofort)
   return b && payer !== b
-    ? {type:"transfer", from:payer, to:b, amount:amt, date:date||today(), note:note||"", createdAt:Date.now()}
+    ? {type:"transfer", from:payer, to:b, amount:amt, date:date||today(), note:note||"", createdAt:Date.now(), status: getMe()===b ? "confirmed" : "pending", by:getMe()||null}
     : {type:"payment", playerId:payer, amount:amt, date:date||today(), note:note||"", createdAt:Date.now()};
+}
+const pendingLed = () => S.ledger.filter(e => e.status==="pending").sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+const pendingFrom = id => pendingLed().filter(e => e.from===id).reduce((s,e)=>s+num(e.amount),0);
+function confirmCard(){
+  const b = bank(); const me = getMe(); const P = pendingLed();
+  if(!b || !P.length) return "";
+  if(me !== b) return "";
+  return `<section class="card" style="border:1.5px solid color-mix(in srgb,var(--good) 50%,var(--line));display:grid;gap:10px">
+    <div class="row between"><h2 style="margin:0">Zahlungen bestätigen</h2><span class="pill good">${P.length} offen</span></div>
+    <p class="muted small" style="margin:0">Prüfe in PayPal oder im Geldbeutel, ob das Geld angekommen ist. Erst nach „Erhalten“ wird es gutgeschrieben.</p>
+    ${P.map(e => `<div style="display:grid;gap:8px;padding-top:10px;border-top:1px solid var(--line)">
+      <div class="row between" style="flex-wrap:nowrap"><div class="who" style="display:flex;gap:10px;align-items:center">${avatar(e.from)}<div><b>${nameHtml(e.from)}</b><div class="meta">${e.note==="PayPal"||e.note==="Aufladung PayPal"?"per PayPal":"bar / sonstiges"}${e.note && !/PayPal/.test(e.note)?" · "+esc(e.note):""} · ${esc(new Date(e.createdAt||0).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}))}</div></div></div>
+        <span class="amt-v" style="font-size:17px">${eur.format(num(e.amount))}</span></div>
+      <div class="row"><button class="btn primary sm" data-act="led-ok" data-id="${esc(e.id)}">Erhalten ✓</button><button class="btn sm danger" data-act="led-no" data-id="${esc(e.id)}">Nicht erhalten</button></div></div>`).join("")}
+  </section>`;
 }
 const LOCK_MS = 24*60*60*1000;
 const ledEditable = e => !!e.createdAt && Date.now() - e.createdAt < LOCK_MS;
@@ -1066,8 +1084,8 @@ function viewCash(){
         ${neg ? `<span class="pill bad">offen</span>` : `<span class="pill good">✓</span>`}</div>
       ${!neg ? gameDots(mine.bal) : ""}
       ${neg && canWrite() ? `<div class="row">${canPP?`<button class="btn primary" data-act="pp" data-id="${esc(me)}" data-amt="${-mine.bal}">${PP_ICON}Mit PayPal an ${esc(pname(ppOwner()))} zahlen</button>`:""}<button class="btn" data-act="settle" data-id="${esc(me)}" data-amt="${-mine.bal}">Als bezahlt eintragen</button></div>` : ""}
-      ${!neg && canWrite() && isGuest(me) && ppReady() && perGame() ? `<div style="display:grid;gap:6px"><button class="btn primary" data-act="pp" data-id="${esc(me)}" data-amt="${perGame()}">${PP_ICON}Anteil für nächsten Spieltag an ${esc(pname(ppOwner()))} senden · ${eur.format(perGame())}</button>
-        <span class="muted small">Als Gast kannst du deinen Anteil schon vorab per PayPal schicken. Er wird dann mit dem nächsten Spieltag verrechnet.</span></div>` : ""}
+      ${pendingFrom(me) ? `<div class="notice small">⏳ ${eur.format(pendingFrom(me))} warten auf Bestätigung durch ${esc(pname(bank()))}. Danach werden sie gutgeschrieben.</div>` : ""}
+      ${canWrite() && ppReady() && me !== ppOwner() ? `<button class="btn ${neg?"":"primary"}" data-act="pp-topup" data-id="${esc(me)}">${PP_ICON}Guthaben aufladen</button>` : ""}
     </section>`; })() : "";
 
   // Kontostand: eine Zeile pro Person, Antippen klappt Details auf
@@ -1085,11 +1103,11 @@ function viewCash(){
   const ledHtml = led.map(e => {
     const isCost = e.type==="cost", isTr = e.type==="transfer";
     const title = isCost ? `${esc(e.title||"Kosten")}` : isTr ? `${nameHtml(e.from)} → ${nameHtml(e.to)}` : `${nameHtml(e.playerId)}`;
-    const kind = isCost ? `geteilt durch ${(e.players||[]).length}` : isTr ? (e.note==="PayPal" ? "PayPal-Zahlung" : "Zahlung") : (e.playerId===bank() ? "Vorschuss" : "Einzahlung");
+    const kind = (e.status==="pending" ? `<span class="pill neutral" style="padding:1px 7px">⏳ unbestätigt</span> ` : "") + (isCost ? `geteilt durch ${(e.players||[]).length}` : isTr ? (/PayPal/.test(e.note||"") ? (/Aufladung/.test(e.note)?"Aufladung per PayPal":"PayPal-Zahlung") : "Zahlung") : (e.playerId===bank() ? "Vorschuss" : "Einzahlung"));
     const armed = S.armed === "led:"+e.id;
     const mo = e.date ? new Date(e.date+"T12:00:00").toLocaleDateString("de-DE",{month:"long",year:"numeric"}) : "";
     const head = mo !== lastMonth ? (lastMonth = mo, `<div class="lbl" style="padding:12px 0 2px">${esc(mo)}</div>`) : "";
-    return head + `<div class="li"><div class="who"><span class="tico ${isCost?"cost":isTr?"tr":"pay"}">${isCost?"−":isTr?"⇄":"+"}</span><div style="min-width:0"><div class="pname">${title}</div><div class="meta">${kind} · ${esc(fmtDate(e.date))}${e.note && e.note!=="PayPal"?" · "+esc(e.note):""}</div></div></div>
+    return head + `<div class="li"><div class="who"><span class="tico ${isCost?"cost":isTr?"tr":"pay"}">${isCost?"−":isTr?"⇄":"+"}</span><div style="min-width:0"><div class="pname">${title}</div><div class="meta">${kind} · ${esc(fmtDate(e.date))}${e.note && !/PayPal/.test(e.note)?" · "+esc(e.note):""}</div></div></div>
       <div class="amt"><span class="amt-v" style="color:${isTr?"var(--info)":isCost?"var(--bad)":"var(--good)"}">${isCost?"−":isTr?"":"+"}${eur.format(num(e.amount))}</span>
       ${canWrite() && ledEditable(e) ? `<button class="btn sm ${armed?"danger armed":"ghost"}" style="${armed?"":"color:var(--muted)"}" data-act="del-led" data-id="${esc(e.id)}" title="Änderbar bis ${esc(ledUntil(e))}">${armed?"Wirklich löschen?":"Löschen · bis "+esc(ledUntil(e))}</button>` : `<span class="small muted" title="Buchungen sind nach 24 Stunden gesperrt">🔒 gesperrt</span>`}</div></div>`;
   }).join("");
@@ -1516,15 +1534,16 @@ function modalTransfer(){
     foot:`<span></span><button class="btn primary" data-act="tr-save" id="btnSaveTr">Umbuchung speichern</button>` };
 }
 function modalPP(){
-  const d = S.draft; const own = ppOwner(); const amt = r2(num(d.amount));
-  return { title:"Per PayPal bezahlen", html:`
+  const d = S.draft; const own = ppOwner(); const amt = r2(num(d.amount)); const g = perGame();
+  return { title: d.topup ? "Guthaben aufladen" : "Per PayPal bezahlen", html:`
     <div class="row" style="gap:12px;flex-wrap:nowrap">${avatar(d.id)}<div><b>${esc(pname(d.id))}</b> zahlt an <b>${esc(pname(own))}</b><div class="muted small">${esc(ppLabel())}</div></div></div>
-    <div class="field"><label for="pp-amt">Betrag (€)</label><input class="input" inputmode="decimal" id="pp-amt" data-f="amount" data-rerender="1" value="${esc(d.amount)}"></div>
+    <div class="field"><label for="pp-amt">Betrag (€)</label><input class="input" inputmode="decimal" id="pp-amt" data-f="amount" data-rerender="1" value="${esc(d.amount)}" placeholder="Betrag eingeben"></div>
+    ${d.topup && g ? `<div class="chips">${[1,2,4,8].map(n => `<button class="chip" data-act="pp-quick" data-v="${n*g}" aria-pressed="${Math.abs(amt-n*g)<0.005}">${eur.format(n*g)} · ${n} ${n===1?"Spieltag":"Spieltage"}</button>`).join("")}</div>` : ""}
     ${ppEmail() ? `<div class="field"><span class="lbl">1. Adresse kopieren</span><div class="prow"><input class="input" readonly value="${esc(ppEmail())}" id="ppMail"><button class="btn sm" data-act="pp-copy" id="btnPpCopy">Kopieren</button></div></div>
       <span class="lbl">2. In PayPal „Senden“ öffnen, Adresse einfügen und ${eur.format(amt)} eingeben</span>` : ""}
     <a class="btn primary" href="${esc(ppLink(amt))}" target="_blank" rel="noopener" id="ppOpen" style="text-decoration:none">${PP_ICON}PayPal öffnen${ppEmail() ? "" : " · "+eur.format(amt)}</a>
-    <div class="notice small">Wähle in PayPal „Freunde und Familie“, dann fallen keine Gebühren an. Komm danach hierher zurück und tippe auf „Bezahlt, eintragen“. Das bucht den Betrag als Zahlung an ${esc(pname(own))}.</div>`,
-    foot:`<span></span><button class="btn primary" data-act="pp-done" id="btnPpDone">Bezahlt, eintragen</button>` };
+    <div class="notice small">Wähle in PayPal „Freunde und Familie“, dann fallen keine Gebühren an. Komm danach hierher zurück und tippe auf „Gesendet“. ${esc(pname(own))} bestätigt die Zahlung, erst dann wird sie gutgeschrieben.</div>`,
+    foot:`<span></span><button class="btn primary" data-act="pp-done" id="btnPpDone">Gesendet, ${esc(pname(own))} bestätigen lassen</button>` };
 }
 function modalImport(){
   return { title:"Daten importieren", html:`<p class="muted small" style="margin:0">Füge hier den Inhalt der Export-Datei ein. Vorhandene Einträge mit gleicher Kennung werden überschrieben.</p>
@@ -1611,7 +1630,7 @@ async function savePay(){
   if(!d.playerId){ toast("Bitte einen Spieler wählen."); return; }
   if(!(amt>0)){ toast("Bitte einen Betrag über 0 € eingeben."); return; }
   const ok = await write(() => S.db.collection("ledger").doc(d.id).set(paymentDoc(d.playerId, amt, (d.note||"").trim(), d.date)));
-  if(ok){ closeModal(); toast(bank() && d.playerId!==bank() ? `${pname(d.playerId)} → ${pname(bank())}: ${eur.format(amt)} gespeichert` : "Zahlung gespeichert"); }
+  if(ok){ closeModal(); toast(bank() && d.playerId!==bank() ? (getMe()===bank() ? `${pname(d.playerId)} → ${pname(bank())}: ${eur.format(amt)} gespeichert` : `Eingetragen · wartet auf Bestätigung durch ${pname(bank())}`) : "Zahlung gespeichert"); }
 }
 async function saveTransfer(){
   const d = S.draft; const amt = r2(num(d.amount));
@@ -1755,17 +1774,21 @@ document.addEventListener("click", e => {
     case "new-transfer": openModal("tr", {id:uid(), from:"", to:"", amount:"", date:today(), note:""}); break;
     case "tr-save": guarded(saveTransfer); break;
     case "pp": openModal("pp", {id, amount:String(r2(num(el.dataset.amt))).replace(".",",")}); break;
+    case "pp-topup": openModal("pp", {id, amount:"", topup:true}); break;
+    case "pp-quick": d.amount = String(el.dataset.v).replace(".",","); renderModal(); break;
+    case "led-ok": guarded(async () => { const ok = await write(() => S.db.collection("ledger").doc(id).update({status:"confirmed", confirmedAt:Date.now()})); if(ok) toast("Zahlung bestätigt"); }); break;
+    case "led-no": guarded(async () => { const ok = await write(() => S.db.collection("ledger").doc(id).delete()); if(ok) toast("Zahlung abgelehnt"); }); break;
     case "pp-copy": navigator.clipboard?.writeText(ppEmail()).then(() => toast("Adresse kopiert"), () => { $("ppMail")?.select(); toast("Adresse markiert, jetzt kopieren"); }); break;
     case "pp-done": {
       const amt = r2(num(d.amount)); const own = ppOwner();
       if(!(amt>0) || !own){ toast("Bitte einen Betrag über 0 € eingeben."); break; }
       // Geld ging direkt an den PayPal-Empfänger: als Umbuchung Zahler → Empfänger buchen
-      guarded(async () => { const ok = await write(() => S.db.collection("ledger").doc(uid()).set({type:"transfer", from:d.id, to:own, amount:amt, date:today(), note:"PayPal", createdAt:Date.now()}));
-        if(ok){ closeModal(); toast(`${pname(d.id)}: ${eur.format(amt)} per PayPal an ${pname(own)} eingetragen`); } });
+      guarded(async () => { const doc = paymentDoc(d.id, amt, d.topup ? "Aufladung PayPal" : "PayPal"); const ok = await write(() => S.db.collection("ledger").doc(uid()).set(doc));
+        if(ok){ closeModal(); toast(doc.status==="pending" ? `Eingetragen · wartet auf Bestätigung durch ${pname(own)}` : `${eur.format(amt)} eingetragen`); } });
       break; }
     case "settle": {
       const amt = r2(num(el.dataset.amt));
-      guarded(async()=>{ const ok = await write(()=>S.db.collection("ledger").doc(uid()).set(paymentDoc(id, amt, "Ausgleich offener Betrag"))); if(ok) toast(`${pname(id)}: ${eur.format(amt)}${bank()&&id!==bank()?" an "+pname(bank()):""} eingetragen`); });
+      guarded(async()=>{ const ok = await write(()=>S.db.collection("ledger").doc(uid()).set(paymentDoc(id, amt, "Ausgleich offener Betrag"))); if(ok) toast(bank()&&id!==bank()&&getMe()!==bank() ? `Eingetragen · wartet auf Bestätigung durch ${pname(bank())}` : `${pname(id)}: ${eur.format(amt)} eingetragen`); });
       break; }
     case "mark-paid": {
       const mdId = el.dataset.md;
@@ -1776,7 +1799,7 @@ document.addEventListener("click", e => {
         const ok = b && payer !== b && sh > 0
           ? await write(()=>S.db.collection("ledger").doc(uid()).set(paymentDoc(payer, sh, "Spieltag " + (mdNumbers()[mdId]||""), today())))
           : await write(()=>S.db.doc("matchdays/"+mdId).update({paid:{[id]:true}, updatedAt:Date.now()}));
-        if(ok) toast(`${pname(id)} als bezahlt markiert`); });
+        if(ok) toast(b && payer!==b && getMe()!==b ? `Eingetragen · wartet auf Bestätigung durch ${pname(b)}` : `${pname(id)} als bezahlt markiert`); });
       break; }
     case "del-led":
       if(!ledEditable(S.ledger.find(x=>x.id===id)||{})){ toast("Buchungen lassen sich nur 24 Stunden lang ändern."); break; }
