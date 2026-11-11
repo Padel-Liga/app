@@ -53,7 +53,9 @@ h1,h2,h3{margin:0;font-weight:700;letter-spacing:-.01em;text-wrap:balance}
 
 /* App-Leiste */
 .appbar{background:linear-gradient(180deg,var(--navy),var(--navy-2));color:#fff;padding:calc(14px + env(safe-area-inset-top)) 16px 14px}
-.appbar-inner{max-width:880px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.appbar-inner{max-width:880px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.cd[hidden]{display:none}
+@media (min-width:760px){.brand{flex:1}}
 .brand{display:flex;align-items:center;gap:12px;min-width:0}
 .logo{width:36px;height:36px;flex:none;border-radius:10px;background:rgba(255,255,255,.08);display:grid;place-items:center}
 .brand h1{font-size:18px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -220,6 +222,38 @@ td.pname{white-space:normal;min-width:96px}
 .wl{font-weight:800;width:20px;height:20px;border-radius:6px;display:inline-grid;place-items:center;font-size:11px;color:#fff;flex:none}
 .wl.S{background:var(--good)}.wl.N{background:var(--bad)}.wl.U{background:var(--muted)}
 
+/* Countdown & Abstimmung */
+.cd{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:6px 12px;cursor:pointer;color:#fff;text-align:left;flex:none}
+.cd .cd-l{font-size:11px;color:rgba(255,255,255,.65);font-weight:600;white-space:nowrap}
+.cd .cd-v{font-size:14px;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.cd.live{background:var(--ball);color:var(--ball-ink);border-color:var(--ball)}
+.cd.live .cd-l{color:var(--ball-ink);opacity:.75}
+.cd .dot{width:8px;height:8px;border-radius:50%;background:var(--ball);flex:none}
+.cd.live .dot{background:var(--ball-ink);animation:pulse 1.4s infinite}
+@keyframes pulse{50%{opacity:.3}}
+@media (max-width:759px){
+  .appbar-inner{flex-wrap:wrap;row-gap:12px}
+  .cd{order:3;width:100%;justify-content:flex-start;padding:9px 12px}
+  .cd>span:last-child{display:flex;justify-content:space-between;align-items:baseline;flex:1;gap:10px}
+  .cd .cd-v{display:inline !important}
+}
+.vote{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.vbtn{border:1px solid var(--line);background:var(--surface);border-radius:12px;min-height:48px;font-weight:700;font-size:13.5px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.vbtn[aria-pressed="true"].yes{background:var(--good);border-color:var(--good);color:#fff}
+.vbtn[aria-pressed="true"].maybe{background:#c98a00;border-color:#c98a00;color:#fff}
+.vbtn[aria-pressed="true"].no{background:var(--bad);border-color:var(--bad);color:#fff}
+.vbtn:disabled{opacity:.45;cursor:not-allowed}
+.slots{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.slot{border:1.5px dashed var(--line);border-radius:12px;min-height:66px;display:grid;place-items:center;align-content:center;gap:4px;padding:6px;font-size:12px;font-weight:600;text-align:center;color:var(--muted)}
+.slot.on{border:1.5px solid var(--good);background:var(--good-bg);color:var(--ink)}
+.slot .avatar{width:30px;height:30px;font-size:11px}
+.vlist{display:grid;gap:6px;font-size:13.5px}
+.vrow{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.vrow .k{width:84px;flex:none;font-size:12px;font-weight:600;color:var(--muted)}
+.me{display:flex;align-items:center;gap:8px}
+.me select{min-height:38px;padding:6px 10px;width:auto;flex:1;max-width:220px}
+.daychips{display:flex;gap:6px;flex-wrap:wrap}
+.daychips .chip{padding:6px 11px;font-size:13px}
 /* Sheet */
 .overlay{position:fixed;inset:0;background:rgba(6,12,26,.55);display:flex;align-items:flex-end;justify-content:center;z-index:20}
 .overlay[hidden]{display:none}
@@ -264,6 +298,7 @@ textarea.input{min-height:160px;font-family:ui-monospace,monospace;font-size:13p
         <div class="sub" id="leagueSub">Wird geladen …</div>
       </div>
     </div>
+    <button class="cd" id="cd" data-act="nav" data-view="tabelle" hidden aria-label="Nächstes Spiel"></button>
     <nav class="tabs" aria-label="Bereiche">
       <button class="tab" data-act="nav" data-view="tabelle" id="tab-tabelle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM17 6h3v1.5A3.5 3.5 0 0 1 16.5 11M7 6H4v1.5A3.5 3.5 0 0 0 7.5 11"/></svg><span>Tabelle</span></button>
       <button class="tab" data-act="nav" data-view="spieltage" id="tab-spieltage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Spieltage</span></button>
@@ -323,7 +358,7 @@ async function importAll(obj){
   await b.commit(); return n;
 }
 
-const S = {
+const S = { votes:[],
   db:null, noDb:false, authUser:null, authChecked:false, denied:false, unsubs:[], readOnly:false, slow:false,
   config:null, matchdays:[], ledger:[],
   loaded:{config:false, md:false, lg:false},
@@ -470,6 +505,7 @@ function balPill(b){
 
 /* ---------- Ansichten ---------- */
 function render(){
+  tickCountdown();
   const cfg = S.config;
   $("leagueName").textContent = cfg?.name || "Padel-Liga";
   const nMd = S.matchdays.length, nP = players().length;
@@ -504,12 +540,93 @@ function render(){
       <p class="muted">Lege zuerst Liganame und eure Spieler an. Danach könnt ihr Spieltage mit Ergebnissen eintragen und festhalten, wer seinen Platzanteil bezahlt hat.</p>
       ${canWrite() ? `<div class="row"><button class="btn primary" data-act="open-settings" id="btnSetup">Liga einrichten</button><button class="btn" data-act="open-import" id="btnImport">Daten aus alter App importieren</button></div>` : ""}</section>`;
   } else if(cfg){
+    if(S.view==="tabelle" || S.view==="spieltage") html += pollCard();
     html += ({tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
   }
   $("view").innerHTML = html;
 }
 function allLoaded(){ return S.loaded.config && S.loaded.md && S.loaded.lg; }
 const fresh = {config:false, md:false, lg:false};
+
+/* ---------- Spielzeiten & Countdown ---------- */
+const WD = ["So","Mo","Di","Mi","Do","Fr","Sa"];
+const sched = () => {
+  const c = S.config || {};
+  const days = Array.isArray(c.playDays) && c.playDays.length ? c.playDays : [2,4];
+  const ok = t => /^\d{1,2}:\d{2}$/.test(t||"");
+  return {days, start: ok(c.startTime) ? c.startTime : "19:30", end: ok(c.endTime) ? c.endTime : "21:00"};
+};
+const atTime = (d, hm) => { const [h,m] = hm.split(":").map(Number); const x = new Date(d); x.setHours(h,m,0,0); return x; };
+const isoDay = d => { const x = new Date(d); x.setMinutes(x.getMinutes()-x.getTimezoneOffset()); return x.toISOString().slice(0,10); };
+/* Nächster Termin, der noch nicht vorbei ist (läuft er gerade, ist es dieser) */
+function nextSession(now = new Date()){
+  const sc = sched();
+  for(let i=0;i<15;i++){
+    const d = new Date(now); d.setDate(d.getDate()+i);
+    if(!sc.days.includes(d.getDay())) continue;
+    const start = atTime(d, sc.start), end = atTime(d, sc.end);
+    if(end <= start) end.setDate(end.getDate()+1);
+    if(now < end) return {start, end, live: now >= start, key: isoDay(start)};
+  }
+  return null;
+}
+const fmtSession = ns => `${WD[ns.start.getDay()]}, ${ns.start.toLocaleDateString("de-DE",{day:"2-digit",month:"2-digit"})}`;
+function countdownText(ns, now = new Date()){
+  if(ns.live){ const m = Math.max(0, Math.round((ns.end-now)/60000)); return `noch ${m>=60 ? Math.floor(m/60)+" Std "+(m%60)+" Min" : m+" Min"}`; }
+  let m = Math.max(0, Math.round((ns.start-now)/60000));
+  const d = Math.floor(m/1440); m -= d*1440; const h = Math.floor(m/60); m -= h*60;
+  return "in " + (d ? `${d} T ${h} Std` : h ? `${h} Std ${m} Min` : `${m} Min`);
+}
+let lastKey = null;
+function tickCountdown(){
+  const el = $("cd"); if(!el) return;
+  const ns = S.config ? nextSession() : null;
+  if(!ns){ el.hidden = true; return; }
+  el.hidden = false; el.classList.toggle("live", ns.live);
+  el.innerHTML = `<span class="dot"></span><span><span class="cd-l">${ns.live ? "Spiel läuft · bis "+sched().end : "Nächstes Spiel · "+fmtSession(ns)+" "+sched().start}</span><span class="cd-v" style="display:block">${countdownText(ns)}</span></span>`;
+  if(lastKey !== ns.key + ns.live){ const first = lastKey===null; lastKey = ns.key + ns.live; if(!first && !S.modal) render(); }
+}
+setInterval(tickCountdown, 20000);
+document.addEventListener("visibilitychange", () => { if(!document.hidden) tickCountdown(); });
+
+/* ---------- Abstimmung ---------- */
+const ME_KEY = "padel-liga-me";
+const getMe = () => { try{ const v = localStorage.getItem(ME_KEY); return players().some(p=>p.id===v) ? v : ""; }catch{ return ""; } };
+const setMe = v => { try{ localStorage.setItem(ME_KEY, v); }catch{} };
+function pollFor(key){
+  const vs = S.votes.filter(v => v.key===key && players().some(p=>p.id===v.pid));
+  const by = s => vs.filter(v=>v.s===s).sort((a,b)=>(a.t||0)-(b.t||0)).map(v=>v.pid);
+  const yes = by("yes");
+  return {yes, play: yes.slice(0,4), wait: yes.slice(4), maybe: by("maybe"), no: by("no"),
+    open: players().map(p=>p.id).filter(id => !vs.some(v=>v.pid===id)), mine: id => vs.find(v=>v.pid===id)?.s || null};
+}
+function pollCard(){
+  if(!S.config || !players().length) return "";
+  const ns = nextSession(); if(!ns) return "";
+  const P = pollFor(ns.key); const me = getMe(); const mine = me ? P.mine(me) : null;
+  const full = P.play.length >= 4;
+  const status = full ? `<span class="pill good">Spiel steht ✓</span>` : `<span class="pill ${P.play.length?"info":"neutral"}">${P.play.length}/4 dabei</span>`;
+  const names = ids => ids.length ? ids.map(id=>esc(pname(id))).join(", ") : `<span class="muted">–</span>`;
+  const hasMd = S.matchdays.some(md => md.date===ns.key);
+  return `<section class="card" style="display:grid;gap:14px">
+    <div class="card-head" style="margin:0"><div><h2>Abstimmung · ${fmtSession(ns)}</h2><div class="small muted">${sched().start}–${sched().end} Uhr${ns.live?" · Spiel läuft gerade":" · Spiel "+countdownText(ns)}</div></div>${status}</div>
+    <div class="me"><label class="lbl" for="meSel" style="white-space:nowrap">Ich bin</label><select class="input" id="meSel" data-act-change="me"><option value="">– Name wählen –</option>${players().map(p=>`<option value="${esc(p.id)}" ${p.id===me?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div>
+    <div class="vote">
+      <button class="vbtn yes" data-act="vote" data-v="yes" aria-pressed="${mine==="yes"}" ${me&&canWrite()?"":"disabled"}>✓ Dabei</button>
+      <button class="vbtn maybe" data-act="vote" data-v="maybe" aria-pressed="${mine==="maybe"}" ${me&&canWrite()?"":"disabled"}>? Vielleicht</button>
+      <button class="vbtn no" data-act="vote" data-v="no" aria-pressed="${mine==="no"}" ${me&&canWrite()?"":"disabled"}>✕ Kann nicht</button>
+    </div>
+    <div class="slots">${[0,1,2,3].map(i => P.play[i] ? `<div class="slot on">${avatar(P.play[i])}<span>${esc(pname(P.play[i]))}</span></div>` : `<div class="slot">Platz ${i+1}<br>frei</div>`).join("")}</div>
+    <div class="vlist">
+      ${P.wait.length?`<div class="vrow"><span class="k">Warteliste</span><span>${names(P.wait)}</span></div>`:""}
+      <div class="vrow"><span class="k">Vielleicht</span><span>${names(P.maybe)}</span></div>
+      <div class="vrow"><span class="k">Kann nicht</span><span>${names(P.no)}</span></div>
+      <div class="vrow"><span class="k">Noch offen</span><span>${names(P.open)}</span></div>
+    </div>
+    <p class="note" style="margin:0">Die ersten vier Zusagen spielen, weitere kommen auf die Warteliste. Nach Spielende um ${sched().end} Uhr startet automatisch die Abstimmung für den nächsten Termin.</p>
+    ${canWrite() && full && !hasMd ? `<button class="btn primary" data-act="new-md" data-poll="${ns.key}" id="btnMdFromPoll">Spieltag mit diesen 4 anlegen</button>` : ""}
+  </section>`;
+}
 function allFresh(){ return fresh.config && fresh.md && fresh.lg; }
 
 const pct = q => (Math.round(q*1000)/10).toLocaleString("de-DE") + " %";
@@ -775,6 +892,7 @@ function viewSettings(){
       <div><div class="lbl">Platzkosten (Standard)</div><span class="num">${eur.format(num(c.defaultCost))}</span></div>
       <div><div class="lbl">Mindestteilnahme</div>${minPct()} % der Spieltage</div>
       <div><div class="lbl">Gäste zahlen an</div>${cashier() ? esc(pname(cashier())) : "Liga-Kasse"}</div>
+      <div><div class="lbl">Spielzeiten</div>${[1,2,3,4,5,6,0].filter(x=>sched().days.includes(x)).map(x=>WD[x]).join(" & ")} · ${sched().start}–${sched().end}</div>
       <div><div class="lbl">Ort (Standard)</div>${esc(c.defaultLocation||"–")}</div>
     </div></section>
   <section class="card"><h2>Spieler</h2><div class="list">${rows}</div></section>
@@ -874,6 +992,11 @@ function modalSettings(){
       <div class="field"><label for="s-loc">Ort (Standard)</label><input class="input" id="s-loc" data-f="defaultLocation" value="${esc(d.defaultLocation)}"></div>
     </div>
     <div class="field"><label for="s-min">Mindestteilnahme für die Wertung (% der Spieltage)</label><input class="input" inputmode="numeric" id="s-min" data-f="minPct" value="${esc(d.minPct)}" style="max-width:120px"></div>
+    <div class="field"><span class="lbl">Spieltage (Wochentage)</span><div class="daychips">${[1,2,3,4,5,6,0].map(x=>`<button class="chip" data-act="s-day" data-day="${x}" aria-pressed="${d.playDays.includes(x)}">${WD[x]}</button>`).join("")}</div></div>
+    <div class="grid2">
+      <div class="field"><label for="s-st">Beginn</label><input class="input" type="time" id="s-st" data-f="startTime" value="${esc(d.startTime)}"></div>
+      <div class="field"><label for="s-en">Ende</label><input class="input" type="time" id="s-en" data-f="endTime" value="${esc(d.endTime)}"></div>
+    </div>
     <div class="field"><label for="s-cash">Gäste zahlen ihren Anteil an</label><select class="input" id="s-cash" data-f="guestCashier"><option value="">Liga-Kasse (niemand bestimmtes)</option>${d.players.filter(p=>(p.name||"").trim()).map(p => `<option value="${esc(p.id)}" ${p.id===d.guestCashier?"selected":""}>${esc(p.name)}</option>`).join("")}</select>
       <div class="muted small">Zahlt ein Gast an diese Person, ist der Gast ausgeglichen und ihr Guthaben sinkt um denselben Betrag.</div></div>`,
     foot: `<span></span><button class="btn primary" data-act="s-save" id="btnSaveSettings">Speichern</button>`
@@ -993,7 +1116,8 @@ async function saveSettings(){
   if(ps.length<4){ toast("Bitte mindestens 4 Spieler eintragen."); return; }
   const gs = d.guests.map(g => { const o = {id:g.id, name:(g.name||"").trim()}; if(g.host) o.host = g.host; return o; }).filter(g => g.name);
   const body = {name:(d.name||"").trim()||"Padel-Liga", season:(d.season||"").trim(), players:ps, guests:gs, defaultCost:r2(num(d.defaultCost)), defaultLocation:(d.defaultLocation||"").trim(),
-    minPct:Math.max(0, Math.min(100, Math.round(num(d.minPct)))), guestCashier: ps.some(p => p.id===d.guestCashier) ? d.guestCashier : "", updatedAt:Date.now()};
+    minPct:Math.max(0, Math.min(100, Math.round(num(d.minPct)))), guestCashier: ps.some(p => p.id===d.guestCashier) ? d.guestCashier : "",
+    playDays: d.playDays.length ? [...d.playDays].sort() : [2,4], startTime: d.startTime||"19:30", endTime: d.endTime||"21:00", updatedAt:Date.now()};
   const ok = await write(() => S.db.doc("league/config").set(body));
   if(ok){ closeModal(); toast("Liga gespeichert"); }
 }
@@ -1029,6 +1153,12 @@ document.addEventListener("click", e => {
     case "nav": S.view = el.dataset.view; history.replaceState(null,"","#"+S.view); render(); break;
     case "close": closeModal(); break;
     case "player": openModal("player", {id}); break;
+    case "vote": {
+      const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
+      const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
+      guarded(async () => { const ok = await write(() => cur===v ? ref.delete() : ref.set({key:ns.key, pid:me, s:v, t: cur==="yes" && v==="yes" ? Date.now() : Date.now()}));
+        if(ok) toast(cur===v ? "Stimme zurückgenommen" : v==="yes" ? "Du bist dabei" : v==="maybe" ? "Als vielleicht eingetragen" : "Abgesagt"); });
+      break; }
     case "toggle-pairs": S.showAllPairs = !S.showAllPairs; render(); break;
     case "copy-link": navigator.clipboard?.writeText(shareLink()).then(() => toast("Link kopiert"), () => { const i = $("shareLink"); i.select(); toast("Link markiert, jetzt kopieren"); }); break;
     case "open-import": openModal("imp", {json:""}); break;
@@ -1040,15 +1170,19 @@ document.addEventListener("click", e => {
     case "open-settings": {
       const c = S.config;
       const ps = c ? players().map(p=>({...p})) : Array.from({length:6},()=>({id:uid(),name:""}));
-      openModal("settings", {name:c?.name||"", season:c?.season||"", players:ps, defaultCost:c?.defaultCost ?? "", defaultLocation:c?.defaultLocation||"", minPct:c?.minPct ?? 50, guestCashier:c?.guestCashier||"", guests:guests().map(g=>({...g}))});
+      openModal("settings", {name:c?.name||"", season:c?.season||"", players:ps, defaultCost:c?.defaultCost ?? "", defaultLocation:c?.defaultLocation||"", minPct:c?.minPct ?? 50, guestCashier:c?.guestCashier||"", playDays:[...sched().days], startTime:sched().start, endTime:sched().end, guests:guests().map(g=>({...g}))});
       break; }
     case "s-add-player": d.players.push({id:uid(),name:""}); renderModal(); break;
     case "s-del-player": d.players.splice(+el.dataset.i,1); renderModal(); break;
+    case "s-day": { const x = +el.dataset.day; const i = d.playDays.indexOf(x); if(i>=0) d.playDays.splice(i,1); else d.playDays.push(x); renderModal(); break; }
     case "s-del-guest": d.guests.splice(+el.dataset.i,1); renderModal(); break;
     case "s-save": guarded(saveSettings); break;
-    case "new-md":
-      openModal("md", {isNew:true, id:uid(), date:today(), location:S.config?.defaultLocation||"", courtCost:S.config?.defaultCost ? String(S.config.defaultCost) : "", participants:[], matches:[], paid:{}, note:"", newGuests:[], guestName:""});
-      break;
+    case "new-md": {
+      // Termin aus der Abstimmung übernehmen: Datum und die ersten 4 Zusagen
+      const ns = nextSession(); const key = el.dataset.poll || (ns && ns.key===today() ? ns.key : null);
+      const parts = key ? pollFor(key).play.slice(0,4) : [];
+      openModal("md", {isNew:true, id:uid(), date:key||today(), location:S.config?.defaultLocation||"", courtCost:S.config?.defaultCost ? String(S.config.defaultCost) : "", participants:[...parts], matches: parts.length===4 ? standardRounds(parts) : [], paid:{}, note:"", newGuests:[], guestName:""});
+      break; }
     case "edit-md": {
       const md = S.matchdays.find(m=>m.id===id); if(!md) return;
       const sets3 = s => { const arr = (s||[]).map(x=>({a:x.a??null,b:x.b??null})); if(!arr.length) arr.push({a:null,b:null}); return arr; };
@@ -1114,7 +1248,9 @@ document.addEventListener("input", e => {
   if(t.dataset.sf){ const [i,j,side] = t.dataset.sf.split(":"); const v = t.value.replace(/\D/g,""); if(v!==t.value) t.value = v; d.matches[+i].sets[+j][side] = v==="" ? null : parseInt(v,10); return; }
 });
 document.addEventListener("change", e => {
-  const t = e.target; const d = S.draft; if(!d) return;
+  const t = e.target;
+  if(t.dataset.actChange==="me"){ setMe(t.value); render(); return; }
+  const d = S.draft; if(!d) return;
   if(t.dataset.mf){ const [i,side,k] = t.dataset.mf.split(":"); d.matches[+i][side][+k] = t.value; }
   else if(t.dataset.gh){ d.guests[+t.dataset.gh].host = t.value || null; }
   else if(t.dataset.f && t.tagName==="SELECT"){ d[t.dataset.f] = t.value; if(t.dataset.rerender) renderModal(); }
@@ -1145,7 +1281,8 @@ function subscribe(){
   S.unsubs = [
     DB.doc("league/config").onSnapshot(s => { S.config = s.exists ? s.data() : null; S.loaded.config = true; if(!s.metadata.fromCache) fresh.config = true; done(); render(); }, onErr),
     DB.collection("matchdays").onSnapshot(q => { S.matchdays = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.md = true; if(!q.metadata.fromCache) fresh.md = true; done(); render(); }, onErr),
-    DB.collection("ledger").onSnapshot(q => { S.ledger = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.lg = true; if(!q.metadata.fromCache) fresh.lg = true; done(); render(); }, onErr)
+    DB.collection("ledger").onSnapshot(q => { S.ledger = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.lg = true; if(!q.metadata.fromCache) fresh.lg = true; done(); render(); }, onErr),
+    DB.collection("votes").onSnapshot(q => { S.votes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {})
   ];
 }
 S.authChecked = true;
