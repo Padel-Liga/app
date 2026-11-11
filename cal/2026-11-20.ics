@@ -1,12 +1,8 @@
 BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//Padel-Liga//Termine//DE
+PRODID:-//Padel-Liga//Spieltag//DE
 CALSCALE:GREGORIAN
 METHOD:PUBLISH
-X-WR-CALNAME:Padel-Liga
-X-WR-TIMEZONE:Europe/Berlin
-REFRESH-INTERVAL;VALUE=DURATION:PT12H
-X-PUBLISHED-TTL:PT12H
 BEGIN:VTIMEZONE
 TZID:Europe/Berlin
 BEGIN:DAYLIGHT
@@ -25,13 +21,12 @@ RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
 END:STANDARD
 END:VTIMEZONE
 BEGIN:VEVENT
-UID:padel-liga-dienstag-donnerstag@padel-liga.github.io
+UID:padel-2026-11-20@padel-liga.github.io
 DTSTAMP:20261111T120000Z
-DTSTART;TZID=Europe/Berlin:20261110T193000
-DTEND;TZID=Europe/Berlin:20261110T210000
-RRULE:FREQ=WEEKLY;BYDAY=TU,TH
-SUMMARY:Padel-Liga
-DESCRIPTION:Abstimmung\, Teams und Ergebnisse in der App: https://padel-liga.github.io/app/
+DTSTART;TZID=Europe/Berlin:20261120T193000
+DTEND;TZID=Europe/Berlin:20261120T210000
+SUMMARY:Padel-Liga Spieltag
+DESCRIPTION:Teams\, Abstimmung und Ergebnisse in der Padel-Liga-App.
 URL:https://padel-liga.github.io/app/
 BEGIN:VALARM
 TRIGGER:-PT1H

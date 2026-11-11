@@ -332,7 +332,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.19";
+const APP_VERSION = "2026-11-11.20";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -995,23 +995,27 @@ function downloadIcs(ev){
   const a = document.createElement("a"); a.href = url; a.download = `padel-${ev.key}.ics`; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
 }
-const SUB_HOST = "padel-liga.github.io/app/termine.ics";
+/* Für jeden Tag liegt eine feste Kalenderdatei mit genau einem Termin im Ordner cal/ (19:30–21:00).
+   Eine echte https-Datei ist der zuverlässige Weg, damit das iPhone „Zum Kalender hinzufügen“ anbietet. */
+const calFileUrl = key => new URL("cal/" + key + ".ics", location.origin + location.pathname).href;
+const calFileOk = () => sched().start==="19:30" && sched().end==="21:00";
 function modalCal(){
   const ev = calEvent(S.draft.key);
   const when = `${ev.start.toLocaleDateString("de-DE",{weekday:"long",day:"numeric",month:"long"})} · ${sched().start}–${sched().end} Uhr`;
-  const subApple = `<a class="btn ${isAndroid()?"":"primary"}" href="webcal://${SUB_HOST}" style="text-decoration:none;${isAndroid()?"color:var(--ink)":""}" id="calSubApple">iPhone / Apple: alle Termine abonnieren</a>`;
-  const subGoogle = `<a class="btn ${isAndroid()?"primary":""}" href="https://calendar.google.com/calendar/render?cid=${encodeURIComponent("webcal://"+SUB_HOST)}" target="_blank" rel="noopener" style="text-decoration:none;${isAndroid()?"":"color:var(--ink)"}" id="calSubGoogle">Google Kalender: alle Termine abonnieren</a>`;
-  const one = `<a class="btn" href="${esc(googleCalUrl(ev))}" target="_blank" rel="noopener" style="text-decoration:none;color:var(--ink)" id="calGoogle">Google Kalender</a>
-    <button class="btn" data-act="cal-ics" id="calIcs">.ics-Datei laden</button>`;
-  return { title:"In Kalender eintragen", html:`
+  const fileBtn = (label, primary) => `<a class="btn ${primary?"primary":""}" href="${esc(calFileUrl(ev.key))}" target="_blank" rel="noopener" style="text-decoration:none;${primary?"":"color:var(--ink)"}" id="calFile">${label}</a>`;
+  const google = primary => `<a class="btn ${primary?"primary":""}" href="${esc(googleCalUrl(ev))}" target="_blank" rel="noopener" style="text-decoration:none;${primary?"":"color:var(--ink)"}" id="calGoogle">Google Kalender</a>`;
+  let btns;
+  if(!calFileOk()) btns = google(true);
+  else if(isIOS()) btns = fileBtn("In Apple Kalender eintragen", true) + google(false);
+  else if(isAndroid()) btns = google(true) + fileBtn("Andere Kalender-App", false);
+  else btns = fileBtn("Kalenderdatei öffnen (.ics)", true) + google(false);
+  return { title:"Spieltag in Kalender eintragen", html:`
     <div class="card" style="padding:14px"><div class="pname">${esc(ev.title)}</div><div class="small muted">${esc(when)}${ev.loc?" · "+esc(ev.loc):""}</div>
       <div class="small" style="margin-top:8px;white-space:pre-line;color:var(--ink-2)">${esc(ev.desc.split("\n").filter(l=>!l.startsWith("App:")).join("\n"))}</div></div>
-    <div class="sect"><h3>Empfohlen: alle Spieltermine abonnieren</h3>
-      <div style="display:grid;gap:8px">${isAndroid() ? subGoogle + subApple : subApple + subGoogle}</div>
-      <p class="note" style="margin:0">Einmal abonnieren, dann stehen alle Termine (${[1,2,3,4,5,6,0].filter(x=>sched().days.includes(x)).map(x=>WD[x]).join(" + ")}, ${sched().start}–${sched().end} Uhr) automatisch im Kalender, mit Erinnerung 1 Stunde vorher. ${isIOS() ? "Auf dem iPhone fragt der Kalender nach, dort auf „Abonnieren“ und dann „Hinzufügen“ tippen." : ""}</p></div>
-    <div class="sect"><h3>Nur diesen Spieltag (mit Teams)</h3>
-      <div class="grid2">${one}</div>
-      <p class="note" style="margin:0">${isIOS() ? "Die .ics-Datei klappt auf dem iPhone nur in Safari, nicht in der Homescreen-App: Datei laden, öffnen und „Hinzufügen“ tippen." : "Ändern sich danach die Teams, wird der Eintrag nicht automatisch angepasst."}</p></div>`,
+    <div style="display:grid;gap:8px">${btns}</div>
+    <p class="note" style="margin:0">Es wird nur dieser eine Termin eingetragen, mit Erinnerung 1 Stunde vorher.
+      ${isIOS() ? "Auf dem iPhone öffnet sich eine Vorschau des Termins. Dort auf „Zum Kalender hinzufügen“ bzw. „Hinzufügen“ tippen." : isAndroid() ? "Google Kalender öffnet sich mit dem fertigen Termin, dort auf „Speichern“ tippen." : ""}
+      ${calFileOk() ? (isIOS() ? "Die Teams stehen nur in der App, im Apple-Kalender steht „Padel-Liga Spieltag“." : "") : "Weil eure Spielzeiten von 19:30–21:00 abweichen, geht es gerade nur über Google Kalender."}</p>`,
     foot:"" };
 }
 
