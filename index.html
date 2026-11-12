@@ -431,7 +431,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.1";
+const APP_VERSION = "2026-11-12.2";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -740,6 +740,7 @@ function tickCountdown(){
   if(lastKey !== ns.key + ns.live){ const first = lastKey===null; lastKey = ns.key + ns.live; if(!first && !S.modal) render(); }
 }
 setInterval(tickCountdown, 20000);
+setInterval(() => { if(S.view==="einstellungen" && !S.modal && (S.accOpen||{}).push) render(); }, 60000);
 
 /* ---------- Update-Prüfung: lädt neu, sobald eine neue Version online ist ---------- */
 let updatePending = false;
@@ -1320,6 +1321,18 @@ async function enablePush(){
     if(ok) toast("Benachrichtigungen sind aktiv");
   }catch(e){ console.error(e); toast("Aktivieren fehlgeschlagen: " + (e?.code || e?.message || e)); }
 }
+/* Status des Push-Dienstes (läuft alle paar Minuten bei GitHub) */
+function pushServiceInfo(){
+  if(!S.pushRun) return {ok:false, text:"Push-Dienst: noch kein Lauf gemeldet"};
+  const min = Math.max(0, Math.round((Date.now() - S.pushRun)/60000));
+  const ago = min < 1 ? "gerade eben" : min === 1 ? "vor 1 Minute" : min < 60 ? `vor ${min} Minuten` : min < 1440 ? `vor ${Math.round(min/60)} Std` : `vor ${Math.round(min/1440)} Tagen`;
+  return {ok: min <= 15, text: `Push-Dienst zuletzt gelaufen: ${ago}`, min};
+}
+function pushServiceLine(){
+  const i = pushServiceInfo();
+  return `<div class="small" style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:10px;background:${i.ok?"var(--good-bg)":"var(--bad-bg)"};color:${i.ok?"var(--good)":"var(--bad)"}">
+    <span>${i.ok ? "✓" : "⚠️"}</span><span>${i.text}${i.ok ? "" : "<br><span style='color:var(--ink-2)'>Benachrichtigungen kommen gerade verspätet. Meist erledigt sich das von selbst. Hält es länger an, bei cron-job.org und GitHub Actions nachsehen.</span>"}</span></div>`;
+}
 function pushCard(){
   if(!S.member) return "";
   const st = pushState(); const prefs = S.member.pushPrefs || {};
@@ -1337,6 +1350,7 @@ function pushCard(){
     <div class="row"><button class="btn sm" data-act="push-test" id="btnPushTest">Test-Nachricht senden</button><button class="btn sm ghost" style="color:var(--muted)" data-act="push-off" id="btnPushOff">Auf diesem Gerät ausschalten</button></div>
     ${S.member.pushTest ? `<div class="muted small">Test angefordert · kommt in den nächsten Minuten.</div>` : ""}`;
   return `<section class="card" style="display:grid;gap:10px"><div class="card-head acc-hide" style="margin:0"><h2>Benachrichtigungen</h2>${st==="on"?`<span class="pill good">aktiv</span>`:""}</div>${body}
+    ${pushServiceLine()}
     <p class="note" style="margin:0">Nachrichten kommen mit ein paar Minuten Verzögerung. Die Einstellungen gelten nur für dieses Gerät.</p></section>`;
 }
 
@@ -1751,7 +1765,7 @@ function viewSettings(){
   return `<div class="page-head"><h2>${esc(c.name||"Padel-Liga")}</h2></div>
   ${accSection("liga","⚙️","Liga-Einstellungen", `${days} · ${sched().start} Uhr · ${eur.format(num(c.defaultCost))}`, "", liga)}
   ${accSection("people","👥","Spieler & Gäste", `${players().length} Spieler${guests().length?` · ${guests().length} ${guests().length===1?"Gast":"Gäste"}`:""}`, "", people)}
-  ${accSection("push","🔔","Benachrichtigungen", pst==="on" ? "auf diesem Gerät aktiv" : "auf diesem Gerät aus", pst==="on" ? `<span class="pill good">an</span>` : `<span class="pill neutral">aus</span>`, pushCard())}
+  ${accSection("push","🔔","Benachrichtigungen", (pst==="on" ? "auf diesem Gerät aktiv" : "auf diesem Gerät aus") + (pushServiceInfo().ok ? "" : " · ⚠️ Dienst verzögert"), pst==="on" ? `<span class="pill good">an</span>` : `<span class="pill neutral">aus</span>`, pushCard())}
   ${accSection("devices","📱","Geräte & Zugänge", `${nDev} ${nDev===1?"Gerät":"Geräte"}${guestMembers.length?` · ${nGuestAct} von ${guestMembers.length} Gästen aktiv`:""}`, S.requests.length ? `<span class="pill info">${S.requests.length} neu</span>` : "", devicesCard())}
   ${broadcastSection()}
   ${accSection("link","🔗","Liga-Link & App", "Link teilen, App neu laden", "", link)}`;
@@ -2366,6 +2380,7 @@ function subscribe(){
     DB.collection("matchdays").onSnapshot(q => { S.mdRaw = q.docs.map(x => ({...x.data(), id:x.id})); mergeResults(); S.loaded.md = true; if(!q.metadata.fromCache) fresh.md = true; done(); render(); }, onErr),
     DB.collection("ledger").onSnapshot(q => { S.ledger = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.lg = true; if(!q.metadata.fromCache) fresh.lg = true; done(); render(); }, onErr),
     DB.collection("votes").onSnapshot(q => { S.votes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
+    DB.doc("system/push").onSnapshot(sn => { S.pushRun = sn.exists ? (sn.data().lastRun || null) : null; render(); }, () => {}),
     DB.collection("broadcasts").onSnapshot(q => { S.broadcasts = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {})
   ];
 }
