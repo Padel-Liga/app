@@ -440,6 +440,7 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .sv{scroll-margin:90px;transition:box-shadow .3s}.sv.flash{box-shadow:0 0 0 3px var(--ball)}
 .sv.done{border-left-color:var(--line)}.sv-o[disabled]{cursor:default;opacity:1;color:inherit}
 .sv-banner{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:0;border-radius:14px;padding:12px 14px;margin-bottom:12px;background:var(--bad);color:#fff;font-family:inherit;cursor:pointer;box-shadow:0 4px 14px color-mix(in srgb,var(--bad) 35%,transparent)}
+.sv-banner.done{background:var(--good) !important;box-shadow:0 4px 14px color-mix(in srgb,var(--good) 35%,transparent) !important}.sv-bt span b{font-size:inherit}
 .sv-banner svg{flex:none;width:18px;height:18px;color:#fff;stroke:#fff}.sv>.row{flex-wrap:nowrap;align-items:center}.sv>.row .btn{flex:none}.sv-bi{font-size:22px}.sv-bt{flex:1;min-width:0;display:grid;gap:2px}.sv-bt b{font-size:15px}.sv-bt span{font-size:12.5px;opacity:.9}
 .info-i{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--muted);background:transparent;color:var(--muted);font:700 12px/1 Georgia,serif;font-style:italic;vertical-align:3px;margin-left:4px;cursor:pointer;padding:0}
 .info-i[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:#fff}
@@ -543,7 +544,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.15";
+const APP_VERSION = "2026-11-12.16";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1328,6 +1329,14 @@ function surveyCard(s){
 function surveyBanners(){
   return S.surveys.filter(svRunning).sort((a,b)=>(b.at||0)-(a.at||0)).map(s => {
     const voted = S.svotes.some(v => v.sid===s.id && v.pid===getMe());
+    const V = S.svotes.filter(v => v.sid===s.id && Number.isInteger(v.o) && v.o < (s.opts||[]).length);
+    const all = players().length && players().every(p => V.some(v => v.pid===p.id));
+    if(all){   // alle Liga-Spieler haben abgestimmt: Ergebnis in Grün
+      const cnt = (s.opts||[]).map((_,i) => V.filter(v=>v.o===i).length); const max = Math.max(...cnt);
+      const win = (s.opts||[]).filter((_,i) => cnt[i]===max);
+      return `<button class="sv-banner done" data-act="nav" data-view="tabelle" data-tsub="me" data-sv="${esc(s.id)}">
+      <span class="sv-bi">✅</span><span class="sv-bt"><b>${esc(s.q)}</b><span>${win.length===1 ? `Ergebnis: <b>${esc(win[0])}</b> · ${max} von ${V.length} Stimmen` : `Gleichstand: ${win.map(esc).join(" / ")} · je ${max} Stimmen`} · alle haben abgestimmt</span></span>${ICON.chev}</button>`;
+    }
     return `<button class="sv-banner" data-act="nav" data-view="tabelle" data-tsub="me" data-sv="${esc(s.id)}">
       <span class="sv-bi">📊</span><span class="sv-bt"><b>Umfrage: ${esc(s.q)}</b><span>von ${esc(pname(s.by))} · ${svLeft(s)}${voted ? " · du hast abgestimmt" : " · jetzt abstimmen"}</span></span>${ICON.chev}</button>`; }).join("");
 }
