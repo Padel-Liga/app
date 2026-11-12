@@ -404,6 +404,13 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .tk-q{font-size:12px;color:var(--muted)}
 .cp{border-top:1px solid var(--line);margin:0 14px;padding:12px 0 16px;display:grid;gap:8px}
 .card>.cp{margin:0;padding:12px 0 0}
+.door{display:flex;align-items:center;gap:10px;margin:0 14px 12px;background:var(--surface-2);border-radius:12px;padding:10px 10px 10px 12px}
+.card>.door{margin:0}
+.door .cp-t{flex:1;font-size:13px;color:var(--muted);font-weight:600}
+.door-c{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:28px;line-height:1.05;letter-spacing:.08em;color:var(--ink)}
+.door.ask{background:var(--info-bg);border:1.5px solid var(--ball)}
+.door.ask .cp-t b{color:var(--ink);font-size:14px}
+.door-f{display:flex;gap:8px;margin-top:8px}.door-f .input{flex:1;min-height:38px;font-size:16px}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
 .cp-ic{font-size:18px}.cp-t{flex:1;font-size:13.5px;color:var(--ink-2)}.cp-t b{color:var(--ink)}
@@ -456,7 +463,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.6";
+const APP_VERSION = "2026-11-12.7";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -486,7 +493,7 @@ async function importAll(obj){
   await b.commit(); return n;
 }
 
-const S = { broadcasts:[], votes:[], rides:[], mdRaw:[], results:{},
+const S = { broadcasts:[], votes:[], rides:[], doorcodes:{}, mdRaw:[], results:{},
   db:null, noDb:false, authUser:null, authChecked:false, denied:false, unsubs:[], readOnly:false, slow:false,
   config:null, matchdays:[], ledger:[],
   loaded:{config:false, md:false, lg:false},
@@ -721,7 +728,9 @@ function render(){
     if(S.view==="home" || S.view==="spieltage") html += missingCard();
     html += ({home:viewHome, tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
   }
+  const di = $("door-in"), dv = di?.value, df = di && document.activeElement===di;
   $("view").innerHTML = html;
+  const dn = $("door-in"); if(dn && di){ dn.value = dv; if(df){ dn.focus(); dn.setSelectionRange(dv.length, dv.length); } }
 }
 function allLoaded(){ return S.loaded.config && S.loaded.md && S.loaded.lg; }
 const fresh = {config:false, md:false, lg:false};
@@ -857,6 +866,7 @@ function pollCard(){
     <div class="slots">${[0,1,2,3].map(i => { const id = P.play[i]; if(!id) return `<div class="slot">Platz ${i+1}<br>frei</div>`;
       const moved = pollNotices(ns.key).some(n => n.in===id);
       return `<div class="slot on" ${moved?`style="border-color:var(--primary)"`:""}>${avatar(id)}<span>${esc(pname(id))}${isGuest(id)?`<br><span class="gtag" style="margin:0">Gast</span>`:""}${moved?`<br><span class="gtag" style="margin:0;color:var(--primary)">nachgerückt</span>`:""}</span></div>`; }).join("")}</div>
+    ${full && !funCard() ? doorCode(ns.key) : ""}
     ${P.play.length && !funCard() ? carpool(ns.key, P.play) : ""}
     <div class="vlist">
       ${P.play.some(isGuest)?`<div class="vrow"><span class="k">Gäste</span><span>${names(P.play.filter(isGuest))}</span></div>`:""}
@@ -1177,6 +1187,16 @@ function carpool(key, play){
   if(!rows && !choose) return "";
   return `<div class="cp"><div class="cp-h">Fahrgemeinschaft</div>${rows}${choose}</div>`;
 }
+/* ---------- Türcode (eintragen dürfen nur Michael und Daniel) ---------- */
+const canDoorCode = () => canWrite() && !!getMe() && (isAdmin() || getMe()===bank());
+function doorCode(key){
+  const dc = S.doorcodes[key]; const can = canDoorCode();
+  if(dc?.code && !(can && S.doorEdit===key))
+    return `<div class="door"><span class="cp-ic">🔑</span><div class="cp-t">Türcode<div class="door-c">${esc(dc.code)}</div></div>${can ? `<button class="btn sm ghost" data-act="door-edit" data-key="${esc(key)}">Ändern</button>` : ""}</div>`;
+  if(!can) return `<div class="door muted-door"><span class="cp-ic">🔑</span><div class="cp-t">Türcode folgt noch</div></div>`;
+  return `<div class="door ask"><span class="cp-ic">🔑</span><div class="cp-t"><b>Bitte Türcode eintragen</b>
+      <div class="door-f"><input class="input" id="door-in" inputmode="text" maxlength="20" autocomplete="off" value="${esc(dc?.code||"")}" placeholder="Code"><button class="btn sm primary" data-act="door-save" data-key="${esc(key)}">Speichern</button></div></div></div>`;
+}
 function funCard(){
   if(!S.config) return "";
   const ns = nextSession(); if(!ns || ns.key !== today()) return "";
@@ -1191,6 +1211,7 @@ function funCard(){
     <div class="tk-perf"></div>
     <div class="tk-line">${play.slice(0,4).map(id => `<div>${avatar(id)}<span>${esc(pname(id))}</span></div>`).join("")}</div>
     ${tiles.length ? `<div class="tk-grid">${tiles.map(t => `<div class="tk-tile"><div class="tk-n">${t.n}</div><div class="tk-u">${t.u}</div><div class="tk-who">${t.who}</div><div class="tk-q">${t.q}</div></div>`).join("")}</div>` : ""}
+    ${doorCode(ns.key)}
     ${carpool(ns.key, play.slice(0,4))}
   </section>`;
 }
@@ -2246,6 +2267,12 @@ document.addEventListener("click", e => {
       guarded(async () => { const ok = await write(() => data ? ref.set(data) : ref.delete());
         if(ok) toast(a==="cp-join" ? `Du fährst bei ${pname(id)} mit` : a==="cp-take" ? `Du nimmst ${pname(id)} mit` : a==="cp-clear" ? "Ausgetragen" : "Eingetragen"); });
       break; }
+    case "door-edit": S.doorEdit = el.dataset.key; render(); setTimeout(() => $("door-in")?.focus(), 50); break;
+    case "door-save": {
+      if(!canDoorCode()) break; const key = el.dataset.key; const code = ($("door-in")?.value||"").trim();
+      if(!code){ toast("Bitte einen Code eingeben."); break; }
+      guarded(async () => { const ok = await write(() => S.db.collection("doorcodes").doc(key).set({code, by:getMe(), at:Date.now()}));
+        if(ok){ S.doorEdit = null; toast("Türcode gespeichert"); render(); } }); break; }
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
@@ -2499,6 +2526,7 @@ function subscribe(){
     DB.collection("matchdays").onSnapshot(q => { S.mdRaw = q.docs.map(x => ({...x.data(), id:x.id})); mergeResults(); S.loaded.md = true; if(!q.metadata.fromCache) fresh.md = true; done(); render(); }, onErr),
     DB.collection("ledger").onSnapshot(q => { S.ledger = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.lg = true; if(!q.metadata.fromCache) fresh.lg = true; done(); render(); }, onErr),
     DB.collection("votes").onSnapshot(q => { S.votes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
+    DB.collection("doorcodes").onSnapshot(q => { S.doorcodes = Object.fromEntries(q.docs.map(x => [x.id, x.data()])); render(); }, () => {}),
     DB.collection("rides").onSnapshot(q => { S.rides = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.doc("system/push").onSnapshot(sn => { S.pushRun = sn.exists ? (sn.data().lastRun || null) : null; render(); }, () => {}),
     DB.collection("broadcasts").onSnapshot(q => { S.broadcasts = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {})
