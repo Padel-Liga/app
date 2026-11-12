@@ -440,6 +440,14 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .sv{scroll-margin:90px;transition:box-shadow .3s}.sv.flash{box-shadow:0 0 0 3px var(--ball)}
 .sv.done{border-left-color:var(--line)}.sv-o[disabled]{cursor:default;opacity:1;color:inherit}
 .sv-banner{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:0;border-radius:14px;padding:12px 14px;margin-bottom:12px;background:var(--bad);color:#fff;font-family:inherit;cursor:pointer;box-shadow:0 4px 14px color-mix(in srgb,var(--bad) 35%,transparent)}
+.sv-banner.done{padding:8px 12px !important;gap:10px !important;margin-bottom:10px !important;border-radius:12px !important}
+.sv-banner.done .sv-bi{width:24px;height:24px;font-size:13px;font-weight:800;border-radius:50%;background:rgba(255,255,255,.22)}
+.sv-banner{min-width:0;max-width:100%;overflow:hidden;box-sizing:border-box}
+.sv-banner.done .sv-bt{display:flex;align-items:baseline;gap:8px;flex-wrap:nowrap;overflow:hidden;min-width:0}
+.sv-banner.done .sv-bt span{max-width:55%;overflow:hidden;text-overflow:ellipsis}
+.sv-banner.done .sv-bt b{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.sv-banner.done .sv-bt span{font-size:12.5px;white-space:nowrap;flex:none;font-weight:700;opacity:1}
+.sv-banner.done svg{width:15px;height:15px}
 .sv-banner.done{background:var(--good) !important;box-shadow:0 4px 14px color-mix(in srgb,var(--good) 35%,transparent) !important}.sv-bt span b{font-size:inherit}
 .sv-banner svg{flex:none;width:18px;height:18px;color:#fff;stroke:#fff}.sv>.row{flex-wrap:nowrap;align-items:center}.sv>.row .btn{flex:none}.sv-bi{font-size:22px}.sv-bt{flex:1;min-width:0;display:grid;gap:2px}.sv-bt b{font-size:15px}.sv-bt span{font-size:12.5px;opacity:.9}
 .info-i{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--muted);background:transparent;color:var(--muted);font:700 12px/1 Georgia,serif;font-style:italic;vertical-align:3px;margin-left:4px;cursor:pointer;padding:0}
@@ -556,7 +564,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.18";
+const APP_VERSION = "2026-11-12.19";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -828,7 +836,12 @@ function render(){
       ${canWrite() ? `<div class="row"><button class="btn primary" data-act="open-settings" id="btnSetup">Liga einrichten</button><button class="btn" data-act="open-import" id="btnImport">Daten aus alter App importieren</button></div>` : ""}</section>`;
   } else if(cfg){
 
-    if(S.view==="home"){ html += doorBig() + liveRoundsCard() + doorTop() + surveyBanners() + recapHome(); const c = funCard(); html += c || pollCard(); }
+    if(S.view==="home"){
+      html += doorBig() + liveRoundsCard();
+      const c = funCard();
+      // Am Spieltag steht die Matchday-Karte oben, danach ist die Abstimmung für den nächsten Termin das Wichtigste: ganz oben angepinnt
+      html += c ? doorTop() + surveyBanners() + recapHome() + c : pollCard() + doorTop() + surveyBanners() + recapHome();
+    }
     if(S.view==="home" || S.view==="spieltage") html += missingCard();
     html += ({home:viewHome, tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
   }
@@ -959,7 +972,7 @@ function pollCard(){
   const one = id => isGuest(id) ? `${esc(pname(id))}<span class="gtag">Gast</span>${canWrite()?`<button class="btn ghost sm" style="min-height:24px;padding:0 6px;color:var(--muted)" data-act="unvote" data-id="${esc(id)}" aria-label="${esc(pname(id))} entfernen">✕</button>`:""}` : esc(pname(id));
   const names = ids => ids.length ? ids.map(one).join(", ") : `<span class="muted">–</span>`;
   return `<section class="card" style="display:grid;gap:14px">
-    <div class="card-head" style="margin:0"><div><h2>Abstimmung · ${fmtSession(ns)} <button class="info-i" data-act="poll-info" aria-label="So funktioniert die Abstimmung" aria-pressed="${!!S.pollInfo}">i</button></h2><div class="small muted">${sched().start}–${sched().end} Uhr${ns.live?" · Spiel läuft gerade":" · Spiel "+countdownText(ns)}</div></div>${status}</div>
+    <div class="card-head" style="margin:0"><div><h2><span style="white-space:nowrap">Abstimmung ·</span> <span style="white-space:nowrap">${fmtSession(ns)} <button class="info-i" data-act="poll-info" aria-label="So funktioniert die Abstimmung" aria-pressed="${!!S.pollInfo}">i</button></span></h2><div class="small muted">${sched().start}–${sched().end} Uhr${ns.live?" · Spiel läuft gerade":" · Spiel "+countdownText(ns)}</div></div>${status}</div>
     ${me ? `<div class="small muted">Du stimmst als <b style="color:var(--ink)">${nameHtml(me)}</b> ab.</div>` : claimBox()}
     <div class="vote">
       <button class="vbtn yes" data-act="vote" data-v="yes" aria-pressed="${mine==="yes"}" ${me&&canWrite()?"":"disabled"}>✓ Dabei</button>
@@ -1349,7 +1362,7 @@ function surveyBanners(){
       const cnt = (s.opts||[]).map((_,i) => V.filter(v=>v.o===i).length); const max = Math.max(...cnt);
       const win = (s.opts||[]).filter((_,i) => cnt[i]===max);
       return `<button class="sv-banner done" data-act="nav" data-view="tabelle" data-tsub="me" data-sv="${esc(s.id)}">
-      <span class="sv-bi">✅</span><span class="sv-bt"><b>${esc(s.q)}</b><span>${win.length===1 ? `Ergebnis: <b>${esc(win[0])}</b> · ${max} von ${V.length} Stimmen` : `Gleichstand: ${win.map(esc).join(" / ")} · je ${max} Stimmen`} · alle haben abgestimmt</span></span>${ICON.chev}</button>`;
+      <span class="sv-bi">✓</span><span class="sv-bt"><b>${esc(s.q)}</b><span>${win.length===1 ? `${esc(win[0])} · ${max} von ${V.length}` : `Gleichstand: ${win.map(esc).join(" / ")}`}</span></span>${ICON.chev}</button>`;
     }
     return `<button class="sv-banner" data-act="nav" data-view="tabelle" data-tsub="me" data-sv="${esc(s.id)}">
       <span class="sv-bi">📊</span><span class="sv-bt"><b>Umfrage: ${esc(s.q)}</b><span>von ${esc(pname(s.by))} · ${svLeft(s)}${voted ? " · du hast abgestimmt" : " · jetzt abstimmen"}</span></span>${ICON.chev}</button>`; }).join("");
