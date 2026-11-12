@@ -402,6 +402,11 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .tk-u{font-size:12.5px;font-weight:600;color:var(--ink-2)}
 .tk-who{font-size:13px;font-weight:700;color:var(--primary);margin-top:4px}
 .tk-q{font-size:12px;color:var(--muted)}
+.cp{border-top:1px solid var(--line);margin:0 14px;padding:12px 0 16px;display:grid;gap:8px}
+.cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
+.cp-ic{font-size:18px}.cp-t{flex:1;font-size:13.5px;color:var(--ink-2)}.cp-t b{color:var(--ink)}
+.cp-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.cp-btns .btn{flex-direction:column;min-height:62px;gap:2px;line-height:1.15;padding:6px}.cp-btns .btn span{font-size:20px}
 </style>
 </head>
 <body>
@@ -450,7 +455,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.3";
+const APP_VERSION = "2026-11-12.4";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -480,7 +485,7 @@ async function importAll(obj){
   await b.commit(); return n;
 }
 
-const S = { broadcasts:[], votes:[], mdRaw:[], results:{},
+const S = { broadcasts:[], votes:[], rides:[], mdRaw:[], results:{},
   db:null, noDb:false, authUser:null, authChecked:false, denied:false, unsubs:[], readOnly:false, slow:false,
   config:null, matchdays:[], ledger:[],
   loaded:{config:false, md:false, lg:false},
@@ -1139,6 +1144,31 @@ function funTiles(key, play){
   const order = seededOrder(T.map((_,i)=>String(i)), key+"tiles").map(Number);
   return T.map((t,i)=>({t, r:order.indexOf(i)})).sort((a,b)=>b.t.w-a.t.w || a.r-b.r).slice(0,4).map(x=>x.t);
 }
+/* ---------- Fahrgemeinschaft (nur für die vier Spieler des Spieltags) ---------- */
+function rideState(key, play){
+  const R = S.rides.filter(r => r.key===key && play.includes(r.pid));
+  const mode = pid => R.find(r => r.pid===pid);
+  const drivers = play.filter(p => mode(p)?.mode==="drive");
+  const ridersOf = d => play.filter(p => mode(p)?.mode==="ride" && mode(p).with===d);
+  const need = play.filter(p => mode(p)?.mode==="need" || (mode(p)?.mode==="ride" && !drivers.includes(mode(p).with)));
+  const solo = play.filter(p => mode(p)?.mode==="solo");
+  return {mode, drivers, ridersOf, need, solo};
+}
+function carpool(key, play){
+  const st = rideState(key, play); const me = getMe(); const mine = play.includes(me) && canWrite();
+  const myMode = mine ? st.mode(me) : null;
+  const iRide = mine && st.drivers.some(d => st.ridersOf(d).includes(me));
+  const iDrive = mine && st.drivers.includes(me);
+  const b = (act, label, extra="", cls="") => `<button class="btn sm ${cls}" data-act="${act}" data-key="${esc(key)}" ${extra}>${label}</button>`;
+  const rows = st.drivers.map(d => { const rs = st.ridersOf(d);
+      const btn = !mine ? "" : d===me ? b("cp-clear","Ändern") : rs.includes(me) ? b("cp-clear","Aussteigen") : (!iDrive && !iRide) ? b("cp-join","Mitfahren",`data-id="${esc(d)}"`,"primary") : "";
+      return `<div class="cp-row"><span class="cp-ic">🚗</span><div class="cp-t"><b>${esc(pname(d))}</b> fährt${rs.length?` · nimmt <b>${rs.map(r=>esc(pname(r))).join(" & ")}</b> mit`:""}</div>${btn}</div>`; }).join("")
+    + st.need.map(n => `<div class="cp-row"><span class="cp-ic">🙋</span><div class="cp-t"><b>${esc(pname(n))}</b> sucht eine Mitfahrt</div>${!mine ? "" : n===me ? b("cp-clear","Zurückziehen") : iDrive ? b("cp-take","Mitnehmen",`data-id="${esc(n)}"`,"primary") : ""}</div>`).join("")
+    + st.solo.map(n => `<div class="cp-row"><span class="cp-ic">🚙</span><div class="cp-t"><b>${esc(pname(n))}</b> fährt alleine</div>${mine && n===me ? b("cp-clear","Ändern") : ""}</div>`).join("");
+  const choose = mine && !myMode ? `<div class="cp-btns">${b("cp-set","<span>🚗</span>Biete Mitfahrt an",'data-v="drive"')}${b("cp-set","<span>🚙</span>Fahre alleine",'data-v="solo"')}${b("cp-set","<span>🙋</span>Brauche Mitfahrt",'data-v="need"')}</div>` : "";
+  if(!rows && !choose) return "";
+  return `<div class="cp"><div class="cp-h">Fahrgemeinschaft</div>${rows}${choose}</div>`;
+}
 function funCard(){
   if(!S.config) return "";
   const ns = nextSession(); if(!ns || ns.key !== today()) return "";
@@ -1153,6 +1183,7 @@ function funCard(){
     <div class="tk-perf"></div>
     <div class="tk-line">${play.slice(0,4).map(id => `<div>${avatar(id)}<span>${esc(pname(id))}</span></div>`).join("")}</div>
     ${tiles.length ? `<div class="tk-grid">${tiles.map(t => `<div class="tk-tile"><div class="tk-n">${t.n}</div><div class="tk-u">${t.u}</div><div class="tk-who">${t.who}</div><div class="tk-q">${t.q}</div></div>`).join("")}</div>` : ""}
+    ${carpool(ns.key, play.slice(0,4))}
   </section>`;
 }
 function viewTable(){
@@ -2190,6 +2221,15 @@ document.addEventListener("click", e => {
         const ok = await write(() => S.db.collection("votes").doc(ns.key+"_"+id).delete());
         if(ok) toast(pname(id)+" ausgetragen" + (moved ? ` · ${pname(moved)} rückt nach` : "")); }); break; }
     case "auto-now": guarded(async () => { const ok = await createFromPoll(el.dataset.key); if(ok) toast("Spieltag angelegt"); }); break;
+    case "cp-set": case "cp-join": case "cp-take": case "cp-clear": {
+      const me = getMe(); const key = el.dataset.key; if(!me || !key) break;
+      const who = a==="cp-take" ? id : me; const ref = S.db.collection("rides").doc(key+"_"+who);
+      const data = a==="cp-set" ? {key, pid:me, mode:el.dataset.v, t:Date.now()}
+        : a==="cp-join" ? {key, pid:me, mode:"ride", with:id, t:Date.now()}
+        : a==="cp-take" ? {key, pid:id, mode:"ride", with:me, t:Date.now()} : null;
+      guarded(async () => { const ok = await write(() => data ? ref.set(data) : ref.delete());
+        if(ok) toast(a==="cp-join" ? `Du fährst bei ${pname(id)} mit` : a==="cp-take" ? `Du nimmst ${pname(id)} mit` : a==="cp-clear" ? "Ausgetragen" : "Eingetragen"); });
+      break; }
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
@@ -2443,6 +2483,7 @@ function subscribe(){
     DB.collection("matchdays").onSnapshot(q => { S.mdRaw = q.docs.map(x => ({...x.data(), id:x.id})); mergeResults(); S.loaded.md = true; if(!q.metadata.fromCache) fresh.md = true; done(); render(); }, onErr),
     DB.collection("ledger").onSnapshot(q => { S.ledger = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.lg = true; if(!q.metadata.fromCache) fresh.lg = true; done(); render(); }, onErr),
     DB.collection("votes").onSnapshot(q => { S.votes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
+    DB.collection("rides").onSnapshot(q => { S.rides = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.doc("system/push").onSnapshot(sn => { S.pushRun = sn.exists ? (sn.data().lastRun || null) : null; render(); }, () => {}),
     DB.collection("broadcasts").onSnapshot(q => { S.broadcasts = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {})
   ];
