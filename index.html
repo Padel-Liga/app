@@ -383,6 +383,25 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .acc-ico{background:var(--primary-soft)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--surface-2:#13293F;--line:#1E3550}}
 #leagueSub{display:none}
+.ticket{padding:0;overflow:visible;position:relative;border:1px solid var(--line)}
+.tk-head{display:flex;justify-content:space-between;align-items:center;padding:16px 18px 14px}
+.tk-k{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--primary)}
+.tk-big{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:34px;line-height:1;text-transform:uppercase;letter-spacing:.02em;color:var(--ink)}
+.tk-time{text-align:right}
+.tk-time b{display:block;font-family:"Barlow Condensed",sans-serif;font-size:30px;line-height:1;color:var(--ink)}
+.tk-time span{font-size:12px;color:var(--muted);font-weight:600}
+.tk-perf{position:relative;height:0;border-top:2px dashed var(--line);margin:0 14px}
+.tk-perf::before,.tk-perf::after{content:"";position:absolute;top:-12px;width:22px;height:22px;border-radius:50%;background:var(--bg);border:1px solid var(--line)}
+.tk-perf::before{left:-26px;clip-path:inset(0 0 0 50%)}.tk-perf::after{right:-26px;clip-path:inset(0 50% 0 0)}
+.tk-line{display:flex;justify-content:space-around;padding:14px 10px 6px}
+.tk-line>div{display:grid;justify-items:center;gap:4px;font-size:12.5px;font-weight:600;flex:1;min-width:0}
+.tk-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 14px 16px}
+.tk-tile{background:var(--surface-2);border-radius:12px;padding:12px;display:grid;gap:1px;border-top:3px solid var(--primary)}
+.tk-tile:nth-child(1){border-top-color:var(--ball)}
+.tk-n{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:34px;line-height:1;color:var(--ink)}
+.tk-u{font-size:12.5px;font-weight:600;color:var(--ink-2)}
+.tk-who{font-size:13px;font-weight:700;color:var(--primary);margin-top:4px}
+.tk-q{font-size:12px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -431,7 +450,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.2";
+const APP_VERSION = "2026-11-12.3";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -692,6 +711,7 @@ function render(){
       ${canWrite() ? `<div class="row"><button class="btn primary" data-act="open-settings" id="btnSetup">Liga einrichten</button><button class="btn" data-act="open-import" id="btnImport">Daten aus alter App importieren</button></div>` : ""}</section>`;
   } else if(cfg){
 
+    if(S.view==="home"){ const c = funCard(); html += c || pollCard(); }
     if(S.view==="home" || S.view==="spieltage") html += missingCard();
     html += ({home:viewHome, tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
   }
@@ -1091,7 +1111,49 @@ function viewHome(){
           <div style="min-width:0"><div class="pname">${esc(pname(x.id))}${x.id===me?` <span class="pill info" style="vertical-align:1px">du</span>`:""}</div><div class="meta">${x.s}:${x.n} Siege · ${formHtml(x.form)}</div></div></div>
         <span class="amt-v" style="font-size:16px">${x.sp?pct(x.quote):"–"}</span></div>`).join("")}</div></section>`
     : `<section class="card"><h2>Tabelle</h2><div class="muted small">Noch keine Ergebnisse.</div></section>`;
-  return broadcastCards() + pollCard() + mini;
+  return broadcastCards() + (funCard() ? pollCard() : "") + mini;
+}
+/* ---------- Spieltag-Karte (Ticket mit Statistik-Kacheln) ---------- */
+function funTiles(key, play){
+  const T = []; const E = eloC(); const nm = id => esc(pname(id));
+  const ps = play.map(id => ({id, P: playerStats(id)}));
+  const hot = ps.filter(x => x.P.curType==="S" && x.P.curLen>=2).sort((a,b)=>b.P.curLen-a.P.curLen)[0];
+  if(hot) T.push({n: hot.P.curLen, u:"Siege in Folge", who: nm(hot.id), q:"Wer stoppt den Lauf? 🔥", w:9});
+  const cold = ps.filter(x => x.P.curType==="N" && x.P.curLen>=2).sort((a,b)=>b.P.curLen-a.P.curLen)[0];
+  if(cold) T.push({n: cold.P.curLen, u:"Niederlagen in Folge", who: nm(cold.id), q:"Heute dreht sich das 🧊", w:7});
+  let best=null;
+  for(let i=0;i<play.length;i++) for(let j=i+1;j<play.length;j++){ const c = compareStats(play[i], play[j]); if(c.vs.sp>=2 && (!best || c.vs.sp>best.c.vs.sp)) best = {a:play[i], b:play[j], c}; }
+  if(best){ const v=best.c.vs; T.push({n:`${v.a}:${v.b}`, u:"im direkten Duell", who:`${nm(best.a)} vs. ${nm(best.b)}`, q: v.a===v.b ? "Alles offen 🥊" : "Revanche fällig? 🥊", w:8}); }
+  if(play.length>=4){
+    const r = plannedRounds(play.slice(0,4), key).map((m,i)=>({i,wp:winProb(m)})).filter(x=>x.wp!=null).sort((a,b)=>Math.abs(a.wp-50)-Math.abs(b.wp-50))[0];
+    if(r) T.push({n:`${r.wp}%`, u:`Siegchance Runde ${r.i+1}`, who:"laut Elo", q:"Das wird ein Krimi ⚖️", w:6});
+  }
+  let duo=null;
+  for(let i=0;i<play.length;i++) for(let j=i+1;j<play.length;j++){ const t = compareStats(play[i], play[j]).tog; if(t.sp>=2 && t.s/t.sp>=.75 && (!duo || t.s>duo.t.s)) duo = {a:play[i], b:play[j], t}; }
+  if(duo) T.push({n:`${duo.t.s}/${duo.t.sp}`, u:"Siege als Team", who:`${nm(duo.a)} & ${nm(duo.b)}`, q:"Traumduo am Start 🤝", w:7});
+  const fav = [...play].filter(id => E.R[id]!=null).sort((a,b)=>E.rating(b)-E.rating(a))[0];
+  if(fav) T.push({n: E.rating(fav), u:"Elo-Punkte", who: nm(fav), q:"Heutiger Favorit 👑", w:5});
+  play.filter(isGuest).forEach(g => { const n = playerStats(g).list.length; T.push({n: n+1, u: n ? "Match als Gast" : "erstes Match", who: nm(g), q: n ? "Willkommen zurück 👋" : "Premiere! 👋", w:6}); });
+  const dw = ps.filter(x => x.P.dayWins>0).sort((a,b)=>b.P.dayWins-a.P.dayWins)[0];
+  if(dw) T.push({n: dw.P.dayWins, u: dw.P.dayWins===1?"Tagessieg":"Tagessiege", who: nm(dw.id), q:"Kommt heute einer dazu? 🏆", w:4});
+  const order = seededOrder(T.map((_,i)=>String(i)), key+"tiles").map(Number);
+  return T.map((t,i)=>({t, r:order.indexOf(i)})).sort((a,b)=>b.t.w-a.t.w || a.r-b.r).slice(0,4).map(x=>x.t);
+}
+function funCard(){
+  if(!S.config) return "";
+  const ns = nextSession(); if(!ns || ns.key !== today()) return "";
+  const md = mdForDate(ns.key);
+  const play = md ? (md.participants||[]) : pollFor(ns.key).play;
+  if(play.length < 4) return "";   // Abstimmung noch nicht komplett: keine Spieltag-Karte
+  const tiles = funTiles(ns.key, play.slice(0,4));
+  const nums = mdNumbers(); const n = md ? nums[md.id] : Object.keys(nums).length + 1;
+  return `<section class="card ticket">
+    <div class="tk-head"><div><div class="tk-k">${ns.live ? "Läuft gerade" : "Heute"} · Spieltag ${n}</div><div class="tk-big">Matchday</div></div>
+      <div class="tk-time"><b>${sched().start}</b><span>${ns.live ? "bis " + sched().end : countdownText(ns)}</span></div></div>
+    <div class="tk-perf"></div>
+    <div class="tk-line">${play.slice(0,4).map(id => `<div>${avatar(id)}<span>${esc(pname(id))}</span></div>`).join("")}</div>
+    ${tiles.length ? `<div class="tk-grid">${tiles.map(t => `<div class="tk-tile"><div class="tk-n">${t.n}</div><div class="tk-u">${t.u}</div><div class="tk-who">${t.who}</div><div class="tk-q">${t.q}</div></div>`).join("")}</div>` : ""}
+  </section>`;
 }
 function viewTable(){
   const st = standings();
@@ -1289,6 +1351,7 @@ const PUSH_TYPES = [
   ["full","✅ Spiel steht (4 Zusagen)"],
   ["unfull","⚠️ Spiel nicht mehr komplett (Absage)"],
   ["moveup","↑ Ich bin von der Warteliste nachgerückt"],
+  ["noon","🎾 Matchday-Fakten um 12 Uhr am Spieltag"],
   ["reminder","⏰ Erinnerung 1 Stunde vor dem Spiel"],
   ["missing","📝 Ergebnisse fehlen noch"],
   ["resconf","🎾 Ergebnis wartet auf meine Bestätigung"],

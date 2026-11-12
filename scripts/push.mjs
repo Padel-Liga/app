@@ -76,6 +76,45 @@ function pollFor(key){
 }
 const result = m => { let sa=0,sb=0,n=0; for(const s of (m.sets||[])){ if(s?.a==null||s?.b==null) continue; n++; if(s.a>s.b) sa++; else if(s.b>s.a) sb++; } return {played:n>0}; };
 
+/* ---------- Statistik für die Matchday-Fakten ---------- */
+const namesList = (ids, and="&") => { const n = ids.map(pname); return n.length<=1 ? (n[0]||"") : n.slice(0,-1).join(", ") + ` ${and} ` + n[n.length-1]; };
+function playedMatches(){
+  const out = [];
+  for(const md of [...matchdays].sort((a,b)=>(a.date||"").localeCompare(b.date||"") || (a.createdAt||0)-(b.createdAt||0)))
+    for(const m of (md.matches||[])){
+      const r = resById[`${md.id}__${m.id}`];
+      const sets = r ? (r.status==="confirmed" ? (r.sets||[]) : []) : (m.sets||[]);
+      let sa=0,sb=0,ga=0,gb=0,n=0;
+      for(const x of sets){ const a=Number(x?.a), b=Number(x?.b); if(x?.a==null||x?.b==null||!(a>=0&&b>=0)) continue; n++; ga+=a; gb+=b; if(a>b) sa++; else if(b>a) sb++; }
+      if(!n) continue;
+      const w = sa>sb ? "a" : sb>sa ? "b" : ga>gb ? "a" : gb>ga ? "b" : "d";
+      out.push({a:m.a||[], b:m.b||[], w});
+    }
+  return out;
+}
+function matchFacts(play){
+  const ms = playedMatches(); const F = [];
+  const side = (m,id) => m.a.includes(id) ? "a" : m.b.includes(id) ? "b" : null;
+  for(const id of play){
+    const xs = ms.filter(m => side(m,id)).map(m => m.w==="d" ? "U" : m.w===side(m,id) ? "S" : "N");
+    if(!xs.length) { if(guests.some(g=>g.id===id)) F.push({w:6, t:`👋 ${pname(id)}: erstes Match`}); continue; }
+    const last = xs[xs.length-1]; let n=0; for(let k=xs.length-1;k>=0&&xs[k]===last;k--) n++;
+    if(last==="S" && n>=2) F.push({w:9+n/100, t:`🔥 ${pname(id)}: ${n} Siege in Folge`});
+    if(last==="N" && n>=2) F.push({w:7+n/100, t:`🧊 ${pname(id)}: ${n} Niederlagen in Folge`});
+  }
+  let best=null, duo=null;
+  for(let i=0;i<play.length;i++) for(let j=i+1;j<play.length;j++){
+    const a=play[i], b=play[j]; const vs={sp:0,a:0,b:0}, tog={sp:0,s:0};
+    for(const m of ms){ const sa=side(m,a), sb=side(m,b); if(!sa||!sb) continue;
+      if(sa===sb){ tog.sp++; if(m.w===sa) tog.s++; } else { vs.sp++; if(m.w===sa) vs.a++; else if(m.w===sb) vs.b++; } }
+    if(vs.sp>=2 && (!best || vs.sp>best.vs.sp)) best={a,b,vs};
+    if(tog.sp>=2 && tog.s/tog.sp>=.75 && (!duo || tog.s>duo.tog.s)) duo={a,b,tog};
+  }
+  if(best){ const [x,y] = best.vs.a>=best.vs.b ? [best.a,best.b] : [best.b,best.a]; F.push({w:8, t:`🥊 ${pname(x)} vs. ${pname(y)} ${Math.max(best.vs.a,best.vs.b)}:${Math.min(best.vs.a,best.vs.b)}`}); }
+  if(duo) F.push({w:7, t:`🤝 ${pname(duo.a)} & ${pname(duo.b)} ${duo.tog.s}/${duo.tog.sp} als Team`});
+  return F.sort((p,q)=>q.w-p.w).slice(0,3).map(f=>f.t);
+}
+
 /* ---------- Empfänger ---------- */
 const active = members.filter(m => m.active !== false && m.pushToken);
 const wants = (m, type) => (m.pushPrefs || {})[type] !== false;
@@ -104,6 +143,22 @@ if(ns){
   // 3) Nachgerückt
   for(const n of votes.filter(v => v.key===ns.key && v.type==="moveup" && P.play.includes(v.in)))
     queue(`moveup:${n.id}`, "↑ Du bist nachgerückt", `Du spielst ${ns.label} um ${sc.start} Uhr (für ${pname(n.out)}).`, forType("moveup", m => m.pid===n.in));
+  // 3b) Matchday-Fakten um 12 Uhr am Spieltag (einmal pro Spieltag)
+  const bp = berlinParts(now);
+  if(ns.key === iso(bp.y,bp.m,bp.d) && bp.hh >= 12 && now < ns.start){
+    const md = matchdays.find(x => x.date===ns.key);
+    const play = (md?.participants?.length ? md.participants : P.play).slice(0,4);
+    if(play.length >= 4){
+      const facts = matchFacts(play);
+      queue(`noon:${ns.key}`, `🎾 Heute ist Matchday! ${sc.start} Uhr`, `${namesList(play)}${facts.length ? "\n" + facts.join(" · ") : ""}`, forType("noon"));
+    } else {
+      const free = 4 - play.length;
+      const maybe = votes.filter(v => v.key===ns.key && v.s==="maybe" && valid(v.pid)).map(v=>v.pid);
+      const body = (play.length ? `Dabei ${play.length===1?"ist":"sind"} ${namesList(play)}.` : "Noch hat niemand zugesagt.")
+        + (maybe.length ? ` ${namesList(maybe, "und")} ${maybe.length===1?"hat":"haben"} „Vielleicht“ gesagt.` : "") + " Kannst du?";
+      queue(`noon:${ns.key}`, `🎾 Heute ${sc.start} Uhr · noch ${free===1?"1 Platz":free+" Plätze"} frei!`, body, forType("noon", m => !P.yes.includes(m.pid)));
+    }
+  }
   // 4) Erinnerung 1 Stunde vorher
   const mins = (ns.start - now)/60000;
   if(mins <= 65 && mins > 0){
