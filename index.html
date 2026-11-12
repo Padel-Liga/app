@@ -160,6 +160,7 @@ td.pname{white-space:normal;min-width:96px}
 .pill.bad{background:var(--bad-bg);color:var(--bad)}
 .pill.info{background:var(--info-bg);color:var(--info)}
 .pill.neutral{background:var(--surface-2);color:var(--muted)}
+.pill.warn{background:#FFF4D6;color:#8A5A00}
 .pill.ball{background:var(--ball);color:var(--ball-ink)}
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 13px;cursor:pointer;font-weight:600;font-size:14px}
@@ -471,6 +472,24 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .pp-crop{width:220px;height:220px;margin:4px auto 0;border-radius:50%;overflow:hidden;box-shadow:0 0 0 4px var(--surface),0 0 0 5px var(--line);display:grid;place-items:center}
 .pp-crop img{width:100%;height:100%;object-fit:cover}.pp-crop .avatar{width:100%;height:100%;font-size:80px}
 .pp-pick{position:relative;overflow:hidden}.pp-pick input{position:absolute;inset:0;opacity:0;cursor:pointer;font-size:0}
+.pmw+.pmw{border-top:1px solid var(--line)}.pmw .resline{padding:0 10px 10px 30px}
+.c1{display:grid;grid-template-columns:24px 1fr auto 1fr;align-items:center;gap:6px;padding:10px 6px 10px 0}
+.c1-l{font-size:10.5px;font-weight:700;color:var(--muted);text-align:center}.c1.extra .c1-l{color:var(--primary)}
+.c1-t{display:grid;grid-template-columns:1fr 1fr;gap:2px}
+.c1-p{display:grid;justify-items:center;gap:3px;min-width:0}
+.c1-p .avatar{width:40px;height:40px;font-size:15px}
+.c1-p span{font-size:11.5px;color:var(--ink-2);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c1-t.win .c1-p span{color:var(--ink);font-weight:700}.c1-t.lose .c1-p span{color:var(--muted)}
+.c1-s{font-weight:800;font-size:17px;color:var(--ink);background:var(--surface-2);border-radius:8px;padding:4px 8px;text-align:center;font-variant-numeric:tabular-nums;display:grid;justify-items:center;line-height:1.15;min-width:50px}
+.c1-s.dim{color:var(--ink-2);font-weight:700;font-size:15px}.c1-s small{font-size:9.5px;font-weight:600;color:var(--muted)}
+.c1-lock{width:10px;height:10px;color:var(--muted);margin-top:1px}
+.md-head.tap{cursor:pointer}
+.md-sum{display:flex;align-items:center;gap:10px;cursor:pointer}
+.md-sum .pills{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:0}
+.md-av{display:flex;flex:none}.md-av .avatar{width:26px;height:26px;font-size:10px;border:2px solid var(--surface);margin-left:-7px}.md-av .avatar:first-child{margin-left:0}
+.md-chev{flex:none;color:var(--muted);transition:transform .2s;display:grid;place-items:center}.md-chev svg{width:18px;height:18px}
+.md.open .md-chev{transform:rotate(90deg)}
+.card.md{gap:10px}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
 .cp-ic{font-size:18px}.cp-t{flex:1;font-size:13.5px;color:var(--ink-2)}.cp-t b{color:var(--ink)}
@@ -523,7 +542,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.12";
+const APP_VERSION = "2026-11-12.13";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1062,7 +1081,7 @@ function missingCard(){
   return `<section class="card" style="border:1.5px solid color-mix(in srgb,var(--bad) 45%,var(--line));background:var(--bad-bg);display:grid;gap:10px">
     <div class="row between"><h2 style="margin:0">Ergebnisse fehlen</h2><span class="pill bad">${L.length} ${L.length===1?"Spieltag":"Spieltage"}</span></div>
     ${L.map(x => `<div class="row between" style="flex-wrap:nowrap"><div class="small"><b>Spieltag ${x.n}</b> · ${esc(fmtDate(x.md.date))}<br><span class="muted">${x.missing ? `${x.missing} ${x.missing===1?"Runde":"Runden"} ohne bestätigtes Ergebnis` : "Noch keine Runden eingetragen"}</span></div>
-      ${canWrite()?`<button class="btn primary sm" data-act="nav" data-view="spieltage">Ansehen</button>`:""}</div>`).join("")}
+      ${canWrite()?`<button class="btn primary sm" data-act="nav" data-view="spieltage" data-md-open="${esc(x.md.id)}">Ansehen</button>`:""}</div>`).join("")}
     <p class="note" style="margin:0">Ergebnisse trägt ein Spieler aus dem Match direkt in der Spieltagskarte ein, das andere Team bestätigt. Runden, die nicht gespielt wurden, kannst du über „Bearbeiten“ entfernen.</p>
   </section>`;
 }
@@ -1493,17 +1512,18 @@ function guestTable(){
 }
 function matchLine(m, i, md){
   const r = result(m);
-  const ta = (m.a||[]).map(nameHtml).join(" / "), tb = (m.b||[]).map(nameHtml).join(" / ");
   const sets = (m.sets||[]).filter(s => s?.a!=null && s?.b!=null);
   const wp = !r.played ? winProb(m) : null;
-  const prop = m.status==="proposed" ? (m.sets||[]).filter(s => s?.a!=null && s?.b!=null) : null;
-  const score = prop && prop.length ? `<span class="score" style="border-style:dashed;color:var(--ink-2)">${prop.map(s=>`${s.a} : ${s.b}`).join(" ")}<small>⏳ offen</small></span>`
-    : !r.played ? (wp!=null ? `<span class="score" title="Siegchance laut Elo" style="font-weight:700;color:var(--ink-2)">${wp} : ${100-wp}<small>% Chance</small></span>` : `<span class="score" style="font-weight:600;color:var(--muted)">offen</span>`)
-    : sets.length===1 ? `<span class="score">${sets[0].a} : ${sets[0].b}</span>`
-    : `<span class="score">${r.sa} : ${r.sb}<small>${sets.map(s=>`${s.a}:${s.b}`).join(" ")}</small></span>`;
-  return `<div class="rnd ${m.extra?"extra":""}"><span class="rl" title="${roundLabel(m,i)}">${m.extra?"EX":"R"+(i+1)}</span><div class="match"><div class="ta ${r.played&&r.w==="a"?"win":""}">${ta}</div>
-    ${score}
-    <div class="tb ${r.played&&r.w==="b"?"win":""}">${tb}</div></div>${md ? resActions(md, m) : ""}</div>`;
+  const prop = m.status==="proposed" ? sets : null;
+  const done = m.status==="confirmed";
+  const lock = `<svg class="c1-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-label="bestätigt"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>`;
+  const pl = id => `<div class="c1-p">${avatar(id)}<span>${esc(pname(id))}</span></div>`;
+  const score = prop && prop.length ? `<div class="c1-s dim">${prop.map(s=>`${s.a}:${s.b}`).join(" ")}<small>⏳ offen</small></div>`
+    : !r.played ? `<div class="c1-s dim">${wp!=null ? `${wp}:${100-wp}<small>% Chance</small>` : "–"}</div>`
+    : `<div class="c1-s">${sets.length===1 ? `${sets[0].a}:${sets[0].b}` : `${r.sa}:${r.sb}`}${sets.length>1 ? `<small>${sets.map(s=>`${s.a}:${s.b}`).join(" ")}</small>` : done ? `<small>${lock}</small>` : ""}</div>`;
+  return `<div class="pmw"><div class="c1 ${m.extra?"extra":""}"><span class="c1-l" title="${roundLabel(m,i)}">${m.extra?"EX":"R"+(i+1)}</span>
+    <div class="c1-t ${r.played&&r.w==="a"?"win":r.played&&r.w==="b"?"lose":""}">${(m.a||[]).map(pl).join("")}</div>${score}<div class="c1-t ${r.played&&r.w==="b"?"win":r.played&&r.w==="a"?"lose":""}">${(m.b||[]).map(pl).join("")}</div></div>
+    ${md && !done ? resActions(md, m) : ""}</div>`;
 }
 function dayLine(md){
   const dr = dayRanking(md); if(!dr.winners.length) return "";
@@ -1521,17 +1541,24 @@ function viewMatchdays(){
     const d = md.date ? new Date(md.date+"T12:00:00") : null;
     const wd = d && !isNaN(d) ? d.toLocaleDateString("de-DE",{weekday:"long"}) : "";
     const winners = dayRanking(md).winners;
-    return `<section class="card md">
-      <div class="md-head">
+    const open = S.mdOpen?.has(md.id);
+    const ms = md.matches||[];
+    const pend = ms.filter(m => m.status==="proposed").length, miss = md.date && md.date < today() ? ms.filter(m => !m.status).length : 0;
+    const stPill = pend ? `<span class="pill warn">${pend} zu bestätigen</span>` : miss ? `<span class="pill bad">${miss} Ergebnis${miss>1?"se":""} fehlt</span>` : "";
+    return `<section class="card md ${open?"open":""}" id="md-${esc(md.id)}">
+      <div class="md-head tap" data-act="md-toggle" data-id="${esc(md.id)}" aria-expanded="${open}">
         <div class="datebox"><b>${d&&!isNaN(d)?d.getDate():"–"}</b><span>${d&&!isNaN(d)?d.toLocaleDateString("de-DE",{month:"short"}).replace(".",""):""}</span></div>
         <div class="md-title"><div class="md-no">Spieltag ${nums[md.id]}</div><div class="md-sub">${esc(wd)}${md.location?" · "+esc(md.location):""}</div></div>
         ${md.date && md.date >= today() ? `<button class="iconbtn" data-act="cal" data-key="${esc(md.date)}" aria-label="In Kalender eintragen" title="In Kalender eintragen">${ICON.cal}</button>` : ""}
         ${canWrite()?`<button class="iconbtn" data-act="edit-md" data-id="${esc(md.id)}" aria-label="Spieltag ${nums[md.id]} bearbeiten" title="Bearbeiten">${ICON.edit}</button>`:""}
       </div>
-      <div class="row">${winners.length?`<span class="pill ball">Tagessieg: ${winners.map(id=>esc(pname(id))).join(" & ")}</span>`:""}${payPill}</div>
-      ${(md.matches||[]).length ? `<div class="rounds">${(md.matches||[]).map((m,i)=>matchLine(m,i,md)).join("")}</div>` : `<div class="muted small">Noch keine Matches eingetragen.</div>`}
+      <div class="md-sum" data-act="md-toggle" data-id="${esc(md.id)}">
+        <div class="md-av">${parts.slice(0,6).map(id => avatar(id)).join("")}</div>
+        <div class="pills">${winners.length?`<span class="pill ball">Tagessieg: ${winners.map(id=>esc(pname(id))).join(" & ")}</span>`:""}${stPill}${payPill}</div>
+        <span class="md-chev">${ICON.chev}</span></div>
+      ${open ? `${ms.length ? `<div class="rounds">${ms.map((m,i)=>matchLine(m,i,md)).join("")}</div>` : `<div class="muted small">Noch keine Matches eingetragen.</div>`}
       ${dayLine(md)}
-      ${md.note?`<div class="muted small">${esc(md.note)}</div>`:""}
+      ${md.note?`<div class="muted small">${esc(md.note)}</div>`:""}` : ""}
     </section>`;
   }).join("");
 }
@@ -2387,7 +2414,9 @@ document.addEventListener("click", e => {
   const a = el.dataset.act, id = el.dataset.id, d = S.draft;
   if(a!=="del-led" && a!=="md-delete" && a!=="mem-del" && a!=="bc-del" && a!=="sv-del") S.armed = null;
   switch(a){
-    case "nav": S.view = el.dataset.view; if(el.dataset.tsub) S.tsub = el.dataset.tsub; history.replaceState(null,"","#"+S.view); render();
+    case "nav": S.view = el.dataset.view; if(el.dataset.tsub) S.tsub = el.dataset.tsub; if(el.dataset.mdOpen){ (S.mdOpen ||= new Set()).add(el.dataset.mdOpen); }
+      history.replaceState(null,"","#"+S.view); render();
+      if(el.dataset.mdOpen){ setTimeout(() => document.getElementById("md-"+el.dataset.mdOpen)?.scrollIntoView({behavior:"smooth", block:"start"}), 60); break; }
       if(el.dataset.sv) setTimeout(() => { const c = document.getElementById("sv-"+el.dataset.sv); if(c){ c.scrollIntoView({behavior:"smooth", block:"center"}); c.classList.add("flash"); setTimeout(()=>c.classList.remove("flash"),1600); } }, 60);
       else window.scrollTo(0,0);
       break;
@@ -2524,6 +2553,7 @@ document.addEventListener("click", e => {
       guarded(async () => { const ref = S.db.collection("avatars").doc(me);
         const ok = await write(() => d.img ? ref.set({img:d.img, at:Date.now()}) : ref.delete());
         if(ok){ closeModal(); toast(d.img ? "Profilbild gespeichert" : "Profilbild entfernt"); } }); break; }
+    case "md-toggle": { S.mdOpen ||= new Set(); if(S.mdOpen.has(id)) S.mdOpen.delete(id); else S.mdOpen.add(id); render(); break; }
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
