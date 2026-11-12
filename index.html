@@ -491,6 +491,10 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .md-chev{flex:none;color:var(--muted);transition:transform .2s;display:grid;place-items:center}.md-chev svg{width:18px;height:18px}
 .md.open .md-chev{transform:rotate(90deg)}
 .card.md{gap:10px}
+.door-big{display:grid;justify-items:center;gap:2px;background:var(--ink);color:#fff;border-radius:16px;padding:16px 16px 18px;margin-bottom:14px;box-shadow:0 6px 20px rgba(10,37,64,.25)}
+.db-k{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.75}
+.db-c{font-size:52px;font-weight:800;line-height:1.05;letter-spacing:.12em;font-variant-numeric:tabular-nums;color:var(--ball);word-break:break-all;text-align:center}
+.door-big.none{background:var(--surface-2);color:var(--ink);box-shadow:none;border:1px solid var(--line)}.db-n{font-size:18px;font-weight:700;color:var(--muted)}
 .live-r{display:grid;gap:10px;border:1.5px solid var(--primary) !important}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
@@ -544,7 +548,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.16";
+const APP_VERSION = "2026-11-12.17";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -816,7 +820,7 @@ function render(){
       ${canWrite() ? `<div class="row"><button class="btn primary" data-act="open-settings" id="btnSetup">Liga einrichten</button><button class="btn" data-act="open-import" id="btnImport">Daten aus alter App importieren</button></div>` : ""}</section>`;
   } else if(cfg){
 
-    if(S.view==="home"){ html += liveRoundsCard() + doorTop() + surveyBanners() + recapHome(); const c = funCard(); html += c || pollCard(); }
+    if(S.view==="home"){ html += doorBig() + liveRoundsCard() + doorTop() + surveyBanners() + recapHome(); const c = funCard(); html += c || pollCard(); }
     if(S.view==="home" || S.view==="spieltage") html += missingCard();
     html += ({home:viewHome, tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
   }
@@ -1448,6 +1452,22 @@ async function ppLoad(file){
   } catch(e){ toast("Das Bild konnte nicht gelesen werden. Bitte ein anderes wählen."); }
   if(S.draft===d){ d.busy = false; renderModal(); }
 }
+/* ---------- Türcode groß ganz oben: 10 Min vor bis 5 Min nach Spielbeginn ---------- */
+function doorWindow(){
+  if(!S.config) return null;
+  const key = today(); const md = mdForDate(key); const wd = new Date(key+"T12:00:00").getDay();
+  if(!md && !sched().days.includes(wd)) return null;
+  const st = new Date(`${key}T${sched().start}`).getTime(); const now = Date.now();
+  if(now < st - 10*60000 || now >= st + 5*60000) return null;
+  const n = md ? (md.participants||[]).length : pollFor(key).play.length;
+  return n >= 4 ? key : null;
+}
+function doorBig(){
+  const key = doorWindow(); if(!key) return "";
+  const dc = S.doorcodes[key];
+  if(dc?.code) return `<section class="door-big"><span class="db-k">🔑 Türcode</span><span class="db-c">${esc(dc.code)}</span></section>`;
+  return canDoorCode() ? "" : `<section class="door-big none"><span class="db-k">🔑 Türcode</span><span class="db-n">noch nicht eingetragen</span></section>`;
+}
 /* ---------- Live-Runden: 19:25 bis 21:10 Uhr ganz oben, zum schnellen Eintragen ---------- */
 function liveWindow(){
   if(!S.config) return null;
@@ -1475,7 +1495,7 @@ function liveRoundsCard(){
     <div class="rounds">${rounds.map((m,i)=>matchLine(m,i)).join("")}</div></section>`;
 }
 let _liveOn = null;
-setInterval(() => { const on = !!liveWindow(); if(on !== _liveOn){ _liveOn = on; if(S.view==="home" && !S.modal) render(); } }, 30000);
+setInterval(() => { const on = !!liveWindow() + "|" + !!doorWindow(); if(on !== _liveOn){ _liveOn = on; if(S.view==="home" && !S.modal) render(); } }, 30000);
 function funCard(){
   if(!S.config) return "";
   const ns = nextSession(); if(!ns || ns.key !== today()) return "";
