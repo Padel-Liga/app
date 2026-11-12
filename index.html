@@ -431,7 +431,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-11.34";
+const APP_VERSION = "2026-11-12.1";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -569,10 +569,22 @@ function pairStats(){
 }
 function finance(){
   const f = {}; [...players(), ...guests()].forEach(p => f[p.id] = {id:p.id, owed:0, paid:0});
-  let total=0, paidTotal=0; const unpaid = [];
+  let total=0, paidTotal=0; const unpaid = []; const outside = [];
   for(const md of [...S.matchdays].sort(byDate)){
     const cost = num(md.courtCost);
     const parts = (md.participants||[]).filter(id => f[id]);
+    if(md.outside){
+      // Spieltag außerhalb des Abos: Kosten zählen zu den Gesamtkosten, nicht zu Daniels Vorschuss
+      if(cost>0 && parts.length){
+        total += cost; const sh = cost/parts.length;
+        outside.push({md, cost, share:sh, paidBy: md.outsidePaidBy || "self", parts});
+        if(md.outsidePaidBy && md.outsidePaidBy!=="self" && f[md.outsidePaidBy]){
+          parts.forEach(id => { const who = f[payerOf(id)] ? payerOf(id) : id; f[who].owed += sh; });
+          f[md.outsidePaidBy].paid += cost;
+        }
+      }
+      continue;
+    }
     if(cost>0 && parts.length){
       total += cost; const sh = cost/parts.length;
       for(const id of parts){
@@ -609,7 +621,7 @@ function finance(){
   const open = all.reduce((s,x) => s + Math.max(0, -x.bal), 0);
   const rows = all.filter(x => !isGuest(x.id));
   const guestRows = all.filter(x => isGuest(x.id) && (x.owed>0 || x.paid>0));
-  return {rows, guestRows, total:r2(total), paidTotal:r2(paidTotal), open:r2(open), openMd, covered};
+  return {rows, guestRows, total:r2(total), paidTotal:r2(paidTotal), open:r2(open), openMd, covered, outside};
 }
 function balPill(b){
   if(Math.abs(b) < 0.005) return `<span class="pill good">Ausgeglichen</span>`;
@@ -1165,7 +1177,7 @@ function viewMatchdays(){
   return head + previewCard() + list.map(md => {
     const cost = num(md.courtCost); const parts = md.participants||[];
     const paidN = parts.filter(id => md.paid?.[id] || FC.covered.has(md.id+"|"+id)).length;
-    const payPill = cost>0 && parts.length ? (paidN===parts.length ? `<span class="pill good">${eur.format(cost)} · bezahlt</span>` : `<span class="pill bad">${paidN}/${parts.length} bezahlt</span>`) : `<span class="pill neutral">ohne Kosten</span>`;
+    const payPill = md.outside ? `<span class="pill info">Außerhalb Abo · ${eur.format(cost)}${md.outsidePaidBy && md.outsidePaidBy!=="self" ? " · " + esc(pname(md.outsidePaidBy)) : ""}</span>` : cost>0 && parts.length ? (paidN===parts.length ? `<span class="pill good">${eur.format(cost)} · bezahlt</span>` : `<span class="pill bad">${paidN}/${parts.length} bezahlt</span>`) : `<span class="pill neutral">ohne Kosten</span>`;
     const d = md.date ? new Date(md.date+"T12:00:00") : null;
     const wd = d && !isNaN(d) ? d.toLocaleDateString("de-DE",{weekday:"long"}) : "";
     const winners = dayRanking(md).winners;
@@ -1462,6 +1474,9 @@ function viewCash(){
   <section class="card"><div class="card-head"><h2>Kontostand</h2><span class="small muted">Antippen für Details</span></div>
     <div>${rows}</div>
     <p class="note">Platzkosten werden gleichmäßig auf die Teilnehmer verteilt und mit Guthaben verrechnet. Löschen kann nur ${bank()?esc(pname(bank())):"der Kassenwart"}, innerhalb von 24 Stunden und mit Grund.${cashier()?` Gäste zahlen an ${esc(pname(cashier()))}.`:""}</p></section>
+  ${F.outside.length ? `<section class="card" style="padding:14px 16px"><div class="card-head" style="margin-bottom:6px"><h2 style="font-size:16px">Außerhalb des Abos</h2><span class="small muted">${eur.format(F.outside.reduce((s,o)=>s+o.cost,0))} gesamt</span></div>
+    <div class="list">${F.outside.slice().reverse().map(o => `<div class="li" style="padding:7px 0"><div class="small"><b>${esc(fmtDate(o.md.date))}</b> <span class="muted">· ${o.paidBy==="self" ? "jeder selbst vor Ort" : "bezahlt von " + esc(pname(o.paidBy))} · je ${eur.format(o.share)}</span></div><span class="small num" style="font-weight:600">${eur.format(o.cost)}</span></div>`).join("")}</div>
+    <p class="note" style="margin:6px 0 0">Zählen zu den Gesamtkosten, nicht zu ${bank()?esc(pname(bank()))+"s":"dem"} Vorschuss. Hat ein Spieler bezahlt, bekommt er den Betrag gutgeschrieben und die Anteile werden mit den Konten verrechnet.</p></section>` : ""}
   <section class="card"><div class="card-head"><h2>Buchungen</h2><span class="small muted">${ledAll.length}</span></div>
     <div class="chips" style="margin-bottom:4px">${fchip("all","Alle")}${fchip("payment","Zahlungen")}${fchip("cost","Kosten")}</div>
     ${ledHtml ? `<div class="list">${ledHtml}</div>` : `<div class="muted small" style="padding-top:8px">Keine Einträge.</div>`}
@@ -1779,8 +1794,12 @@ function modalMd(){
     html: `
     <div class="grid2">
       <div class="field"><label for="f-date">Datum</label><input class="input" type="date" id="f-date" data-f="date" value="${esc(d.date)}"></div>
-      <div class="field"><label for="f-cost">Platzkosten (€)</label><input class="input" inputmode="decimal" id="f-cost" data-f="courtCost" data-rerender="1" value="${esc(d.courtCost)}"></div>
+      <div class="field"><label for="f-cost">${d.outside ? "Platzkosten gesamt (€)" : "Platzkosten (€)"}</label><input class="input" inputmode="decimal" id="f-cost" data-f="courtCost" data-rerender="1" value="${esc(d.courtCost)}"></div>
     </div>
+    <div class="field"><div class="chips"><button class="chip" data-act="md-outside" aria-pressed="${!!d.outside}" id="btnOutside">${d.outside ? "✓ " : ""}Spieltag außerhalb des Abos</button></div>
+      ${d.outside ? `<label for="f-opb" class="lbl" style="margin-top:6px">Wer hat den Platz bezahlt?</label>
+        <select class="input" id="f-opb" data-f="outsidePaidBy" data-rerender="1"><option value="self" ${d.outsidePaidBy==="self"?"selected":""}>Jeder zahlt seinen Anteil selbst vor Ort</option>${players().map(p => `<option value="${esc(p.id)}" ${d.outsidePaidBy===p.id?"selected":""}>${esc(p.name)} hat bezahlt</option>`).join("")}</select>
+        <div class="muted small">${num(d.courtCost)>0 && d.participants.length ? `Je Spieler ${eur.format(num(d.courtCost)/d.participants.length)}. ` : ""}Die Kosten laufen nicht über ${bank()?esc(pname(bank()))+"s":"den"} Vorschuss${d.outsidePaidBy && d.outsidePaidBy!=="self" ? `: ${esc(pname(d.outsidePaidBy))} bekommt den Gesamtbetrag gutgeschrieben, die Anteile werden mit den Konten verrechnet.` : ", jeder hat direkt bezahlt."}</div>` : ""}</div>
     <div class="field"><label for="f-loc">Ort / Platz</label><input class="input" id="f-loc" data-f="location" value="${esc(d.location)}" placeholder="z. B. Padel Club, Platz 2"></div>
     <div class="field"><span class="lbl">Wer war dabei? · ${d.participants.length}/4</span><div class="chips">${players().map(p => `<button class="chip" data-act="md-part" data-id="${esc(p.id)}" aria-pressed="${d.participants.includes(p.id)}">${esc(p.name)}</button>`).join("")}</div>
       ${d.participants.length>4?`<div class="small" style="color:var(--bad)">Bitte genau 4 Spieler wählen.</div>`:""}</div>
@@ -1796,12 +1815,12 @@ function modalMd(){
         <button class="btn primary" data-act="md-extra" id="btnExtra" ${four?"":"disabled"} title="Teams für eine zusätzliche Runde auslosen">+ Extra-Runde auslosen</button>
       </div>
     </div>
-    <div class="field"><span class="lbl">Bezahlt${share?` · je ${eur.format(share)}`:""}</span>
+    ${d.outside ? "" : `<div class="field"><span class="lbl">Bezahlt${share?` · je ${eur.format(share)}`:""}</span>
       ${d.participants.length ? `<div class="chips">${d.participants.map(id => bank() && payerOf(id)!==bank()
         ? `<span class="chip" style="cursor:default;${d.paid[id]||covMd.has(d.id+"|"+id)?"background:var(--good-bg);border-color:var(--good);color:var(--good)":""}">${nameHtml(id)}${d.paid[id]?" ✓":covMd.has(d.id+"|"+id)?" · Guthaben ✓":" · offen"}</span>`
         : `<button class="chip paid" data-act="md-paid" data-id="${esc(id)}" aria-pressed="${!!d.paid[id]}">${nameHtml(id)}${d.paid[id]?" ✓":covMd.has(d.id+"|"+id)?" · Guthaben":""}</button>`).join("")}</div>
         ${bank() ? `<div class="muted small">Bezahlt wird in der Kasse über „Zahlung an ${esc(pname(bank()))} erfassen“.</div>` : ""}` : `<div class="muted small">Erst Teilnehmer wählen.</div>`}
-    </div>
+    </div>`}
     <div class="field"><label for="f-note">Notiz</label><input class="input" id="f-note" data-f="note" value="${esc(d.note)}" placeholder="optional"></div>`,
     foot: `${d.isNew ? "<span></span>" : `<button class="btn danger ${armed?"armed":""}" data-act="md-delete" id="btnDelMd">${armed?"Wirklich löschen?":"Spieltag löschen"}</button>`}
       <button class="btn primary" data-act="md-save" id="btnSaveMd">Speichern</button>`
@@ -1961,7 +1980,9 @@ async function saveMd(){
   const parts = [...d.participants];
   c.matches.forEach(m => [...m.a,...m.b].forEach(p => { if(!parts.includes(p)) parts.push(p); }));
   const paid = {}; parts.forEach(p => { if(d.paid[p]) paid[p] = true; });
-  const body = {date:d.date, location:(d.location||"").trim(), courtCost:r2(num(d.courtCost)), participants:parts, matches:c.matches, paid, note:(d.note||"").trim(), createdAt:d.createdAt||Date.now(), updatedAt:Date.now()};
+  const body = {date:d.date, location:(d.location||"").trim(), courtCost:r2(num(d.courtCost)), participants:parts, matches:c.matches, paid, note:(d.note||"").trim(), createdAt:d.createdAt||Date.now(), updatedAt:Date.now(),
+    outside: !!d.outside, outsidePaidBy: d.outside ? (d.outsidePaidBy||"self") : null};
+  if(d.outside && !(num(d.courtCost)>0)){ toast("Bitte die Platzkosten für den Spieltag außerhalb des Abos eintragen."); return; }
   const fresh = draftGuests().filter(g => parts.includes(g.id) || Object.keys(d.paid).includes(g.id));
   if(fresh.length){
     const okG = await write(() => S.db.doc("league/config").update({guests:[...guests(), ...fresh], updatedAt:Date.now()}));
@@ -2123,14 +2144,15 @@ document.addEventListener("click", e => {
       // Termin aus der Abstimmung übernehmen: Datum und die ersten 4 Zusagen
       const ns = nextSession(); const key = el.dataset.poll || (ns && ns.key===today() ? ns.key : null);
       const parts = key ? pollFor(key).play.slice(0,4) : [];
-      openModal("md", {isNew:true, id:uid(), date:key||today(), location:S.config?.defaultLocation||"", courtCost:S.config?.defaultCost ? String(S.config.defaultCost) : "", participants:[...parts], matches: parts.length===4 ? standardRounds(parts) : [], paid:{}, note:"", newGuests:[], guestName:""});
+      openModal("md", {isNew:true, id:uid(), date:key||today(), location:S.config?.defaultLocation||"", courtCost:S.config?.defaultCost ? String(S.config.defaultCost) : "", participants:[...parts], matches: parts.length===4 ? standardRounds(parts) : [], paid:{}, note:"", newGuests:[], guestName:"", outside:false, outsidePaidBy:"self"});
       break; }
     case "edit-md": {
       const md = S.matchdays.find(m=>m.id===id); if(!md) return;
       const sets3 = s => { const arr = (s||[]).map(x=>({a:x.a??null,b:x.b??null})); if(!arr.length) arr.push({a:null,b:null}); return arr; };
       openModal("md", {isNew:false, id:md.id, createdAt:md.createdAt, date:md.date||"", location:md.location||"", courtCost:md.courtCost!=null?String(md.courtCost):"", participants:[...(md.participants||[])],
-        matches:(md.matches||[]).map(m=>({id:m.id||uid(), extra:!!m.extra, a:[m.a?.[0]||"",m.a?.[1]||""], b:[m.b?.[0]||"",m.b?.[1]||""], sets:sets3(m.sets), status:m.status||null})), paid:{...(md.paid||{})}, note:md.note||"", newGuests:[], guestName:""});
+        matches:(md.matches||[]).map(m=>({id:m.id||uid(), extra:!!m.extra, a:[m.a?.[0]||"",m.a?.[1]||""], b:[m.b?.[0]||"",m.b?.[1]||""], sets:sets3(m.sets), status:m.status||null})), paid:{...(md.paid||{})}, note:md.note||"", newGuests:[], guestName:"", outside:!!md.outside, outsidePaidBy:md.outsidePaidBy||"self"});
       break; }
+    case "md-outside": d.outside = !d.outside; renderModal(); break;
     case "md-part": {
       const i = d.participants.indexOf(id); if(i>=0) d.participants.splice(i,1); else d.participants.push(id);
       const order = [...players(), ...guests(), ...draftGuests()].map(p=>p.id); d.participants.sort((x,y)=>order.indexOf(x)-order.indexOf(y));
