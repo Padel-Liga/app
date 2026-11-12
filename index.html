@@ -464,6 +464,13 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .rc-v{font-family:"Barlow Condensed",sans-serif;font-weight:800;font-size:28px;line-height:1.1;color:var(--ink)}.rc-v.pos{color:var(--good)}.rc-v.neg{color:var(--bad)}
 .rc-w{font-size:12px;color:var(--ink-2);font-weight:600}
 .rc-foot{border-top:1px solid var(--line);padding:10px 16px;font-size:12px;color:var(--muted);text-align:center}
+.avatar.ph{background:var(--surface-2);overflow:hidden;padding:0}.avatar.ph img{width:100%;height:100%;object-fit:cover;display:block}
+.me-av{position:relative;flex:none}.me-av .avatar.lg{width:72px;height:72px;font-size:26px}
+.me-cam{position:absolute;right:-4px;bottom:-4px;width:28px;height:28px;border-radius:50%;background:var(--primary);color:#fff;border:2.5px solid var(--surface);display:grid;place-items:center;padding:0;cursor:pointer}
+.me-cam svg{width:14px;height:14px}
+.pp-crop{width:220px;height:220px;margin:4px auto 0;border-radius:50%;overflow:hidden;box-shadow:0 0 0 4px var(--surface),0 0 0 5px var(--line);display:grid;place-items:center}
+.pp-crop img{width:100%;height:100%;object-fit:cover}.pp-crop .avatar{width:100%;height:100%;font-size:80px}
+.pp-pick{position:relative;overflow:hidden}.pp-pick input{position:absolute;inset:0;opacity:0;cursor:pointer;font-size:0}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
 .cp-ic{font-size:18px}.cp-t{flex:1;font-size:13.5px;color:var(--ink-2)}.cp-t b{color:var(--ink)}
@@ -516,7 +523,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.11";
+const APP_VERSION = "2026-11-12.12";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -546,7 +553,7 @@ async function importAll(obj){
   await b.commit(); return n;
 }
 
-const S = { broadcasts:[], votes:[], rides:[], doorcodes:{}, surveys:[], svotes:[], tsub:"me", mdRaw:[], results:{},
+const S = { broadcasts:[], votes:[], rides:[], doorcodes:{}, avatars:{}, surveys:[], svotes:[], tsub:"me", mdRaw:[], results:{},
   db:null, noDb:false, authUser:null, authChecked:false, denied:false, unsubs:[], readOnly:false, slow:false,
   config:null, matchdays:[], ledger:[],
   loaded:{config:false, md:false, lg:false},
@@ -1119,7 +1126,8 @@ const sgn = v => { const s = (Math.round(v*10)/10).toLocaleString("de-DE",{minim
 const AV = ["#2150d6","#0e8a7e","#b4500f","#7a3fd1","#c2335b","#3d7a1f","#0b6fa8","#8a6a00"];
 const avColor = id => { let h = 0; for(const c of String(id)) h = (h*31 + c.charCodeAt(0)) >>> 0; return AV[h % AV.length]; };
 const initials = n => (n||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase();
-const avatar = (id, lg) => `<span class="avatar${lg?" lg":""}" style="background:${avColor(id)}" aria-hidden="true">${esc(initials(pname(id)))}</span>`;
+const avImg = id => { const u = S.avatars?.[id]?.img; return typeof u==="string" && u.startsWith("data:image/") ? u : ""; };
+const avatar = (id, lg) => avImg(id) ? `<span class="avatar ph${lg?" lg":""}" aria-hidden="true"><img src="${avImg(id)}" alt="" loading="lazy" decoding="async"></span>` : `<span class="avatar${lg?" lg":""}" style="background:${avColor(id)}" aria-hidden="true">${esc(initials(pname(id)))}</span>`;
 const formHtml = f => `<span class="form">${f.slice(-5).map(x=>`<span class="fd ${x}" title="${x==="S"?"Sieg":x==="N"?"Niederlage":"Unentschieden"}">${x}</span>`).join("")}</span>`;
 const ICON = {
   cal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4M12 13v5M9.5 15.5h5"/></svg>',
@@ -1313,7 +1321,7 @@ function viewMe(){
   const streak = !P.curType ? "–" : `${P.curLen} ${P.curType==="S" ? (P.curLen===1?"Sieg":"Siege") : (P.curLen===1?"Niederlage":"Niederlagen")}`;
   return `
   <section class="card me-head">
-    <div class="row" style="gap:14px;flex-wrap:nowrap">${avatar(me,true)}<div style="min-width:0;flex:1">
+    <div class="row" style="gap:16px;flex-wrap:nowrap"><div class="me-av">${avatar(me,true)}${canWrite()?`<button class="me-cam" data-act="pp-open" aria-label="Profilbild ändern"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>`:""}</div><div style="min-width:0;flex:1">
       <div class="me-name">${esc(pname(me))}</div>
       <div class="muted small">${rk>=0?`Platz ${rk+1} von ${ranked.length}`:"noch nicht gewertet"} · Elo ${E.rating(me)}</div>
       <div style="margin-top:6px">${formHtml(P.list.map(x=>x.res))}</div></div>
@@ -1372,6 +1380,34 @@ function recapCard(md){
     </div>
     ${(() => { const ns = nextSession(); return `<div class="rc-foot">Sichtbar bis morgen${ns ? ` · <b>Nächstes Match: ${esc(fmtSession(ns))}, ${sched().start} Uhr</b>` : ""}</div>`; })()}
   </section>`;
+}
+/* ---------- Profilbild ---------- */
+function modalPic(){
+  const d = S.draft; const me = getMe(); const cur = d.img ?? avImg(me);
+  return { title:"Profilbild", html:`
+    <div class="pp-crop">${cur ? `<img src="${cur}" alt="Vorschau">` : `<span class="avatar" style="background:${avColor(me)}">${esc(initials(pname(me)))}</span>`}</div>
+    <p class="muted small" style="text-align:center;margin:10px 0 0">${d.busy ? "Bild wird vorbereitet …" : "So sehen dich die anderen – in Abstimmung, Tabelle, Matchday-Karte & Co."}</p>
+    <div class="grid2" style="margin-top:14px">
+      <label class="btn pp-pick">Foto wählen<input type="file" accept="image/*" data-pp="1"></label>
+      <label class="btn pp-pick">Selfie aufnehmen<input type="file" accept="image/*" capture="user" data-pp="1"></label></div>
+    ${cur ? `<button class="btn ghost" style="width:100%;margin-top:6px;color:var(--bad)" data-act="pp-remove">Bild entfernen</button>` : ""}`,
+    foot:`<span></span><button class="btn primary" data-act="pp-save" id="btnPpSave" ${d.img===undefined || d.busy ? "disabled" : ""}>Speichern</button>` };
+}
+async function ppLoad(file){
+  const d = S.draft; if(!file || !d) return;
+  d.busy = true; renderModal();
+  try{
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    const size = 320, c = document.createElement("canvas"); c.width = c.height = size;
+    const s = Math.min(img.naturalWidth, img.naturalHeight);
+    c.getContext("2d").drawImage(img, (img.naturalWidth-s)/2, (img.naturalHeight-s)/2, s, s, 0, 0, size, size);
+    URL.revokeObjectURL(url);
+    let q = .82, out = c.toDataURL("image/jpeg", q);
+    while(out.length > 90000 && q > .4){ q -= .1; out = c.toDataURL("image/jpeg", q); }
+    if(S.draft===d) d.img = out;
+  } catch(e){ toast("Das Bild konnte nicht gelesen werden. Bitte ein anderes wählen."); }
+  if(S.draft===d){ d.busy = false; renderModal(); }
 }
 function funCard(){
   if(!S.config) return "";
@@ -2085,7 +2121,7 @@ function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = tru
 function renderModal(first){
   S._elo = null;
   const body = $("sheetBody"); const top = body.scrollTop;
-  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed, alerts:modalAlerts, res:modalRes, bc:modalBc, sv:modalSurvey}[S.modal];
+  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed, alerts:modalAlerts, res:modalRes, bc:modalBc, sv:modalSurvey, ppic:modalPic}[S.modal];
   if(!fn) return;
   const {title, html, foot} = fn();
   $("sheetTitle").textContent = title; body.innerHTML = html; $("sheetFoot").innerHTML = foot;
@@ -2481,6 +2517,13 @@ document.addEventListener("click", e => {
       S.armed = null;
       guarded(async () => { const ok = await write(() => S.db.collection("surveys").doc(id).delete()); if(ok) toast("Umfrage gelöscht"); }); break; }
     case "poll-info": S.pollInfo = !S.pollInfo; render(); break;
+    case "pp-open": if(getMe()) openModal("ppic", {}); break;
+    case "pp-remove": S.draft.img = null; renderModal(); break;
+    case "pp-save": {
+      const me = getMe(); if(!me || d.img===undefined) break;
+      guarded(async () => { const ref = S.db.collection("avatars").doc(me);
+        const ok = await write(() => d.img ? ref.set({img:d.img, at:Date.now()}) : ref.delete());
+        if(ok){ closeModal(); toast(d.img ? "Profilbild gespeichert" : "Profilbild entfernt"); } }); break; }
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
@@ -2607,6 +2650,7 @@ document.addEventListener("input", e => {
 });
 document.addEventListener("change", e => {
   const t = e.target;
+  if(t.dataset.pp){ ppLoad(t.files?.[0]); t.value = ""; return; }
   if(t.dataset.actChange==="me"){ setMe(t.value); render(); return; }
   const d = S.draft; if(!d) return;
   if(t.dataset.mf){ const [i,side,k] = t.dataset.mf.split(":"); d.matches[+i][side][+k] = t.value; }
@@ -2736,6 +2780,7 @@ function subscribe(){
     DB.collection("votes").onSnapshot(q => { S.votes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("surveys").onSnapshot(q => { S.surveys = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("svotes").onSnapshot(q => { S.svotes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
+    DB.collection("avatars").onSnapshot(q => { S.avatars = Object.fromEntries(q.docs.map(x => [x.id, x.data()])); render(); }, () => {}),
     DB.collection("doorcodes").onSnapshot(q => { S.doorcodes = Object.fromEntries(q.docs.map(x => [x.id, x.data()])); render(); }, () => {}),
     DB.collection("rides").onSnapshot(q => { S.rides = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.doc("system/push").onSnapshot(sn => { S.pushRun = sn.exists ? (sn.data().lastRun || null) : null; render(); }, () => {}),
