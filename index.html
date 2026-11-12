@@ -263,6 +263,10 @@ td.pname{white-space:normal;min-width:96px}
 .alarm .n{background:#fff;color:var(--bad);border-radius:999px;min-width:22px;height:22px;display:grid;place-items:center;font-size:12px;padding:0 6px}
 @media (prefers-reduced-motion:no-preference){.alarm{animation:ring 2.4s infinite}@keyframes ring{0%,100%{box-shadow:0 8px 24px rgba(210,58,42,.4),0 0 0 0 rgba(210,58,42,.45)}60%{box-shadow:0 8px 24px rgba(210,58,42,.4),0 0 0 14px rgba(210,58,42,0)}}}
 @media (min-width:760px){.alarm{bottom:24px}}
+.alarm{transition:padding .2s,gap .2s}
+.alarm .al-t{transition:max-width .25s,opacity .2s;max-width:260px;overflow:hidden;white-space:nowrap}
+body.scrolled .alarm{padding:10px 10px 10px 12px;gap:4px}
+body.scrolled .alarm .al-t{max-width:0;opacity:0}
 .has-alarm main{padding-bottom:calc(var(--nav-h) + 110px + env(safe-area-inset-bottom)) !important}
 .resline{grid-column:2;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;justify-content:space-between;padding:0 12px 10px 4px}
 /* Aufklappbare Bereiche */
@@ -436,6 +440,8 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .sv.done{border-left-color:var(--line)}.sv-o[disabled]{cursor:default;opacity:1;color:inherit}
 .sv-banner{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:0;border-radius:14px;padding:12px 14px;margin-bottom:12px;background:var(--bad);color:#fff;font-family:inherit;cursor:pointer;box-shadow:0 4px 14px color-mix(in srgb,var(--bad) 35%,transparent)}
 .sv-banner svg{flex:none;width:18px;height:18px;color:#fff;stroke:#fff}.sv>.row{flex-wrap:nowrap;align-items:center}.sv>.row .btn{flex:none}.sv-bi{font-size:22px}.sv-bt{flex:1;min-width:0;display:grid;gap:2px}.sv-bt b{font-size:15px}.sv-bt span{font-size:12.5px;opacity:.9}
+.info-i{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;border:1.5px solid var(--muted);background:transparent;color:var(--muted);font:700 12px/1 Georgia,serif;font-style:italic;vertical-align:3px;margin-left:4px;cursor:pointer;padding:0}
+.info-i[aria-pressed="true"]{background:var(--primary);border-color:var(--primary);color:#fff}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
 .cp-ic{font-size:18px}.cp-t{flex:1;font-size:13.5px;color:var(--ink-2)}.cp-t b{color:var(--ink)}
@@ -488,7 +494,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.9";
+const APP_VERSION = "2026-11-12.10";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -688,11 +694,12 @@ function balPill(b){
 
 /* ---------- Ansichten ---------- */
 function alertCount(){ if(!isActive(S.member)) return 0; return S.requests.length + (isBankMe() ? pendingLed().length : 0) + pendingResultsForMe().length; }
+addEventListener("scroll", () => document.body.classList.toggle("scrolled", scrollY > 80 && innerHeight + scrollY < document.documentElement.scrollHeight - 40), {passive:true});
 function updateAlarm(){
   const el = $("alarm"); if(!el) return; const n = alertCount();
   el.hidden = !n; document.body.classList.toggle("has-alarm", !!n);
   if(n){ const parts = []; if(S.requests.length) parts.push(S.requests.length===1?"Freigabe":"Freigaben"); if(isBankMe() && pendingLed().length) parts.push(pendingLed().length===1?"Zahlung":"Zahlungen"); if(pendingResultsForMe().length) parts.push(pendingResultsForMe().length===1?"Ergebnis":"Ergebnisse");
-    el.innerHTML = `<span aria-hidden="true">🔔</span><span>${parts.join(" & ")} bestätigen</span><span class="n">${n}</span>`; }
+    el.innerHTML = `<span aria-hidden="true">🔔</span><span class="al-t">${parts.join(" & ")} bestätigen</span><span class="n">${n}</span>`; }
   if(S.modal==="alerts"){ if(n) renderModal(); else closeModal(); }
 }
 function modalAlerts(){
@@ -880,7 +887,7 @@ function pollCard(){
   const one = id => isGuest(id) ? `${esc(pname(id))}<span class="gtag">Gast</span>${canWrite()?`<button class="btn ghost sm" style="min-height:24px;padding:0 6px;color:var(--muted)" data-act="unvote" data-id="${esc(id)}" aria-label="${esc(pname(id))} entfernen">✕</button>`:""}` : esc(pname(id));
   const names = ids => ids.length ? ids.map(one).join(", ") : `<span class="muted">–</span>`;
   return `<section class="card" style="display:grid;gap:14px">
-    <div class="card-head" style="margin:0"><div><h2>Abstimmung · ${fmtSession(ns)}</h2><div class="small muted">${sched().start}–${sched().end} Uhr${ns.live?" · Spiel läuft gerade":" · Spiel "+countdownText(ns)}</div></div>${status}</div>
+    <div class="card-head" style="margin:0"><div><h2>Abstimmung · ${fmtSession(ns)} <button class="info-i" data-act="poll-info" aria-label="So funktioniert die Abstimmung" aria-pressed="${!!S.pollInfo}">i</button></h2><div class="small muted">${sched().start}–${sched().end} Uhr${ns.live?" · Spiel läuft gerade":" · Spiel "+countdownText(ns)}</div></div>${status}</div>
     ${me ? `<div class="small muted">Du stimmst als <b style="color:var(--ink)">${nameHtml(me)}</b> ab.</div>` : claimBox()}
     <div class="vote">
       <button class="vbtn yes" data-act="vote" data-v="yes" aria-pressed="${mine==="yes"}" ${me&&canWrite()?"":"disabled"}>✓ Dabei</button>
@@ -901,7 +908,7 @@ function pollCard(){
       <div class="vrow"><span class="k">Noch offen</span><span>${names(P.open)}</span></div>
     </div>
     ${canWrite()?`<div><button class="btn sm" data-act="poll-guest" id="btnPollGuest">${ICON.plus}Gast eintragen</button></div>`:""}
-    <p class="note" style="margin:0">Die ersten vier Zusagen spielen, weitere kommen auf die Warteliste. Sagt jemand ab, rückt der Erste der Warteliste automatisch nach. Steht das Spiel, wird der Spieltag um ${sched().start} Uhr automatisch angelegt. Nach Spielende startet die Abstimmung für den nächsten Termin.</p>
+    ${S.pollInfo ? `<p class="note" style="margin:0">Die ersten vier Zusagen spielen, weitere kommen auf die Warteliste. Sagt jemand ab, rückt der Erste der Warteliste automatisch nach. Steht das Spiel, wird der Spieltag um ${sched().start} Uhr automatisch angelegt. Nach Spielende startet die Abstimmung für den nächsten Termin.</p>` : ""}
   </section>`;
 }
 function modalPollGuest(){
@@ -2413,6 +2420,7 @@ document.addEventListener("click", e => {
       if(S.armed!=="sv:"+id){ S.armed = "sv:"+id; render(); break; }
       S.armed = null;
       guarded(async () => { const ok = await write(() => S.db.collection("surveys").doc(id).delete()); if(ok) toast("Umfrage gelöscht"); }); break; }
+    case "poll-info": S.pollInfo = !S.pollInfo; render(); break;
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
