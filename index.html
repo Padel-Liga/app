@@ -490,6 +490,7 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .md-chev{flex:none;color:var(--muted);transition:transform .2s;display:grid;place-items:center}.md-chev svg{width:18px;height:18px}
 .md.open .md-chev{transform:rotate(90deg)}
 .card.md{gap:10px}
+.live-r{display:grid;gap:10px;border:1.5px solid var(--primary) !important}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
 .cp-ic{font-size:18px}.cp-t{flex:1;font-size:13.5px;color:var(--ink-2)}.cp-t b{color:var(--ink)}
@@ -542,7 +543,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.14";
+const APP_VERSION = "2026-11-12.15";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -814,7 +815,7 @@ function render(){
       ${canWrite() ? `<div class="row"><button class="btn primary" data-act="open-settings" id="btnSetup">Liga einrichten</button><button class="btn" data-act="open-import" id="btnImport">Daten aus alter App importieren</button></div>` : ""}</section>`;
   } else if(cfg){
 
-    if(S.view==="home"){ html += doorTop() + surveyBanners() + recapHome(); const c = funCard(); html += c || pollCard(); }
+    if(S.view==="home"){ html += liveRoundsCard() + doorTop() + surveyBanners() + recapHome(); const c = funCard(); html += c || pollCard(); }
     if(S.view==="home" || S.view==="spieltage") html += missingCard();
     html += ({home:viewHome, tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
   }
@@ -1438,6 +1439,34 @@ async function ppLoad(file){
   } catch(e){ toast("Das Bild konnte nicht gelesen werden. Bitte ein anderes wählen."); }
   if(S.draft===d){ d.busy = false; renderModal(); }
 }
+/* ---------- Live-Runden: 19:25 bis 21:10 Uhr ganz oben, zum schnellen Eintragen ---------- */
+function liveWindow(){
+  if(!S.config) return null;
+  const key = today(); const md = mdForDate(key); const wd = new Date(key+"T12:00:00").getDay();
+  if(!md && !sched().days.includes(wd)) return null;
+  const start = new Date(`${key}T${sched().start}`).getTime() - 5*60000;
+  let end = new Date(`${key}T${sched().end}`).getTime() + 10*60000;
+  if(end <= start) end += 86400000;
+  const now = Date.now(); if(now < start || now >= end) return null;
+  return {key, md};
+}
+function liveRoundsCard(){
+  const w = liveWindow(); if(!w) return "";
+  const {key, md} = w;
+  if(md){
+    const ms = md.matches||[]; if(!ms.length) return "";
+    const open = ms.filter(m => !m.status).length;
+    if(!open) return "";   // alle Ergebnisse eingetragen: nur noch unter Spieltage sichtbar
+    return `<section class="card live-r"><div class="row between"><h2 style="margin:0">Runden heute</h2><span class="pill info">${open} von ${ms.length} offen</span></div>
+      <div class="rounds">${ms.map((m,i)=>matchLine(m,i,md)).join("")}</div></section>`;
+  }
+  const play = pollFor(key).play; if(play.length < 4) return "";
+  const rounds = plannedRounds(play.slice(0,4), key);
+  return `<section class="card live-r"><div class="row between"><h2 style="margin:0">Runden heute</h2><span class="pill neutral">${Date.now() < new Date(`${key}T${sched().start}`).getTime() ? `ab ${sched().start} eintragbar` : "Spieltag wird angelegt …"}</span></div>
+    <div class="rounds">${rounds.map((m,i)=>matchLine(m,i)).join("")}</div></section>`;
+}
+let _liveOn = null;
+setInterval(() => { const on = !!liveWindow(); if(on !== _liveOn){ _liveOn = on; if(S.view==="home" && !S.modal) render(); } }, 30000);
 function funCard(){
   if(!S.config) return "";
   const ns = nextSession(); if(!ns || ns.key !== today()) return "";
