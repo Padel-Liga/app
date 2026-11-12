@@ -55,7 +55,7 @@ async function all(coll){ const q = await db.collection(`${base}/${coll}`).get()
 const cfgSnap = await db.doc(`${base}/league/config`).get();
 if(!cfgSnap.exists){ console.log("Keine Liga-Konfiguration."); process.exit(0); }
 const cfg = cfgSnap.data();
-const [members, votes, matchdays, ledger, requests, results, broadcasts, surveys] = await Promise.all(["members","votes","matchdays","ledger","requests","results","broadcasts","surveys"].map(all));
+const [members, votes, matchdays, ledger, requests, results, broadcasts, surveys, comments] = await Promise.all(["members","votes","matchdays","ledger","requests","results","broadcasts","surveys","comments"].map(all));
 const resById = Object.fromEntries(results.map(r => [r.id, r]));
 const stateRef = db.doc(`${base}/system/push`);
 const state = (await stateRef.get()).data() || {};
@@ -206,6 +206,11 @@ for(const b of broadcasts.filter(b => b.status==="queued" && ADMIN_PIDS.includes
 // Neue Umfrage (an alle außer dem Ersteller, nur solange sie läuft)
 for(const s of surveys.filter(s => (s.until||0) > Date.now() && Date.now() - (s.at||0) < 86400000))
   queue(`sv:${s.id}`, `📊 Neue Umfrage von ${pname(s.by)}`, `${s.q}\n${(s.opts||[]).join(" · ")}`, forType("survey", m => m.pid !== s.by));
+// Neue Kommentare (nur frische, an alle außer dem Verfasser)
+for(const c of comments.filter(c => typeof c.text==="string" && Date.now() - (c.at||0) < 3600000)){
+  const where = (c.t||"").startsWith("sv:") ? `Umfrage „${(surveys.find(s => "sv:"+s.id===c.t)?.q || "").slice(0,40)}“` : "Abstimmung";
+  queue(`cm:${c.id}`, `💬 ${pname(c.pid)} · ${where}`, c.text.slice(0,140), forType("comment", m => m.pid !== c.pid));
+}
 // Test-Nachrichten
 const tests = members.filter(m => m.pushTest && m.pushToken && m.active !== false);
 for(const m of tests) outbox.push({key:null, title:"🔔 Test", body:"Push-Benachrichtigungen funktionieren!", to:[m], test:true});

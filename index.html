@@ -495,6 +495,14 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .db-k{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;opacity:.75}
 .db-c{font-size:52px;font-weight:800;line-height:1.05;letter-spacing:.12em;font-variant-numeric:tabular-nums;color:var(--ball);word-break:break-all;text-align:center}
 .door-big.none{background:var(--surface-2);color:var(--ink);box-shadow:none;border:1px solid var(--line)}.db-n{font-size:18px;font-weight:700;color:var(--muted)}
+.cm{display:grid;gap:8px;border-top:1px solid var(--line);padding-top:10px}
+.cm-i{display:flex;gap:8px;align-items:flex-start}.cm-i .avatar{width:28px;height:28px;font-size:11px}
+.cm-b{flex:1;min-width:0;background:var(--surface-2);border-radius:4px 12px 12px 12px;padding:6px 10px}
+.cm-h{display:flex;align-items:baseline;gap:8px;font-size:12px}.cm-h b{font-size:12.5px}.cm-h span{color:var(--muted);flex:1}
+.cm-x{border:0;background:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0 2px}
+.cm-t{font-size:14px;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.cm-f{display:flex;gap:8px}.cm-f .input{flex:1;min-height:38px;font-size:16px}
+.cm-more{border:0;background:none;color:var(--primary);font:600 12.5px var(--font);text-align:left;padding:0;cursor:pointer}
 .live-r{display:grid;gap:10px;border:1.5px solid var(--primary) !important}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
@@ -548,7 +556,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.17";
+const APP_VERSION = "2026-11-12.18";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -578,7 +586,7 @@ async function importAll(obj){
   await b.commit(); return n;
 }
 
-const S = { broadcasts:[], votes:[], rides:[], doorcodes:{}, avatars:{}, surveys:[], svotes:[], tsub:"me", mdRaw:[], results:{},
+const S = { broadcasts:[], votes:[], rides:[], doorcodes:{}, avatars:{}, comments:[], cmOpen:new Set(), surveys:[], svotes:[], tsub:"me", mdRaw:[], results:{},
   db:null, noDb:false, authUser:null, authChecked:false, denied:false, unsubs:[], readOnly:false, slow:false,
   config:null, matchdays:[], ledger:[],
   loaded:{config:false, md:false, lg:false},
@@ -824,9 +832,9 @@ function render(){
     if(S.view==="home" || S.view==="spieltage") html += missingCard();
     html += ({home:viewHome, tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
   }
-  const di = $("door-in"), dv = di?.value, df = di && document.activeElement===di;
+  const keep = [...$("view").querySelectorAll("input.keep[id], #door-in")].map(e => [e.id, e.value, document.activeElement===e]);
   $("view").innerHTML = html;
-  const dn = $("door-in"); if(dn && di){ dn.value = dv; if(df){ dn.focus(); dn.setSelectionRange(dv.length, dv.length); } }
+  for(const [id, v, f] of keep){ const e = $(id); if(!e) continue; e.value = v; if(f){ e.focus(); try{ e.setSelectionRange(v.length, v.length); }catch{} } }
 }
 function allLoaded(){ return S.loaded.config && S.loaded.md && S.loaded.lg; }
 const fresh = {config:false, md:false, lg:false};
@@ -972,6 +980,7 @@ function pollCard(){
       <div class="vrow"><span class="k">Noch offen</span><span>${names(P.open)}</span></div>
     </div>
     ${canWrite()?`<div><button class="btn sm" data-act="poll-guest" id="btnPollGuest">${ICON.plus}Gast eintragen</button></div>`:""}
+    ${commentBlock("poll:"+ns.key)}
     ${S.pollInfo ? `<p class="note" style="margin:0">Die ersten vier Zusagen spielen, weitere kommen auf die Warteliste. Sagt jemand ab, rückt der Erste der Warteliste automatisch nach. Steht das Spiel, wird der Spieltag um ${sched().start} Uhr automatisch angelegt. Nach Spielende startet die Abstimmung für den nächsten Termin.</p>` : ""}
   </section>`;
 }
@@ -1328,6 +1337,7 @@ function surveyCard(s){
         ${n?`<span class="sv-who">${who.map(id=>`<span class="sv-av">${avatar(id)}</span>`).join("")}<span class="sv-names">${who.map(id=>esc(pname(id))).join(", ")}</span></span>`:""}</button>`; }).join("")}</div>
     <div class="row between" style="gap:8px"><div class="sv-f">${tot} ${tot===1?"Stimme":"Stimmen"}${run ? (canVote ? (mine!=null ? " · Tippe auf eine andere Antwort, um umzustimmen" : " · Tippe auf eine Antwort") : "") : " · Abstimmung beendet"}</div>
       ${canDel ? `<button class="btn sm ${armed?"danger armed":"ghost"}" style="${armed?"":"color:var(--muted)"}" data-act="sv-del" data-id="${esc(s.id)}">${armed?"Wirklich löschen?":"Löschen"}</button>` : ""}</div>
+    ${commentBlock("sv:"+s.id)}
   </section>`;
 }
 function surveyBanners(){
@@ -1496,6 +1506,28 @@ function liveRoundsCard(){
 }
 let _liveOn = null;
 setInterval(() => { const on = !!liveWindow() + "|" + !!doorWindow(); if(on !== _liveOn){ _liveOn = on; if(S.view==="home" && !S.modal) render(); } }, 30000);
+/* ---------- Kommentare unter Abstimmung und Umfragen ---------- */
+function commentBlock(target){
+  const L = S.comments.filter(c => c.t===target && typeof c.text==="string").sort((a,b)=>(a.at||0)-(b.at||0));
+  const open = S.cmOpen.has(target); const shown = open ? L : L.slice(-2); const me = getMe();
+  const when = t => { const d = new Date(t||0), n = new Date(); const sameDay = d.toDateString()===n.toDateString();
+    return sameDay ? d.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"}) : d.toLocaleDateString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit"}); };
+  const fid = "cm-"+target.replace(/[^a-zA-Z0-9]/g,"_");
+  return `<div class="cm">
+    ${L.length > 2 ? `<button class="cm-more" data-act="cm-toggle" data-t="${esc(target)}">${open ? "Weniger anzeigen" : `Alle ${L.length} Kommentare anzeigen`}</button>` : ""}
+    ${shown.map(c => `<div class="cm-i">${avatar(c.pid)}<div class="cm-b"><div class="cm-h"><b>${esc(pname(c.pid))}</b><span>${when(c.at)}</span>
+        ${canWrite() && me && (c.pid===me || isAdmin()) ? `<button class="cm-x" data-act="cm-del" data-id="${esc(c.id)}" aria-label="Kommentar löschen">✕</button>` : ""}</div>
+        <div class="cm-t">${esc(c.text)}</div></div></div>`).join("")}
+    ${canWrite() && me ? `<div class="cm-f"><input class="input keep" id="${fid}" maxlength="300" placeholder="Kommentar schreiben …" autocomplete="off" enterkeyhint="send" data-cm="${esc(target)}"><button class="btn sm primary" data-act="cm-send" data-t="${esc(target)}" data-f="${fid}" aria-label="Senden">Senden</button></div>` : ""}
+  </div>`;
+}
+async function sendComment(target, fid){
+  const me = getMe(); const inp = $(fid); const text = (inp?.value||"").trim().replace(/\s+/g," ");
+  if(!me || !text) return;
+  inp.value = "";
+  const ok = await write(() => S.db.collection("comments").doc(uid()).set({t:target, pid:me, text, at:Date.now()}));
+  if(!ok && inp) inp.value = text;
+}
 function funCard(){
   if(!S.config) return "";
   const ns = nextSession(); if(!ns || ns.key !== today()) return "";
@@ -1725,6 +1757,7 @@ const PUSH_TYPES = [
   ["moveup","↑ Ich bin von der Warteliste nachgerückt"],
   ["noon","🎾 Matchday-Fakten um 12 Uhr am Spieltag"],
   ["survey","📊 Neue Umfrage gestartet"],
+  ["comment","💬 Neue Kommentare"],
   ["reminder","⏰ Erinnerung 1 Stunde vor dem Spiel"],
   ["missing","📝 Ergebnisse fehlen noch"],
   ["resconf","🎾 Ergebnis wartet auf meine Bestätigung"],
@@ -2480,7 +2513,7 @@ async function saveCost(){
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if(!el || el.disabled) return;
   const a = el.dataset.act, id = el.dataset.id, d = S.draft;
-  if(a!=="del-led" && a!=="md-delete" && a!=="mem-del" && a!=="bc-del" && a!=="sv-del") S.armed = null;
+  if(a!=="del-led" && a!=="md-delete" && a!=="mem-del" && a!=="bc-del" && a!=="sv-del" && a!=="cm-del") S.armed = null;
   switch(a){
     case "nav": S.view = el.dataset.view; if(el.dataset.tsub) S.tsub = el.dataset.tsub; if(el.dataset.mdOpen){ (S.mdOpen ||= new Set()).add(el.dataset.mdOpen); }
       history.replaceState(null,"","#"+S.view); render();
@@ -2622,6 +2655,12 @@ document.addEventListener("click", e => {
         const ok = await write(() => d.img ? ref.set({img:d.img, at:Date.now()}) : ref.delete());
         if(ok){ closeModal(); toast(d.img ? "Profilbild gespeichert" : "Profilbild entfernt"); } }); break; }
     case "md-toggle": { S.mdOpen ||= new Set(); if(S.mdOpen.has(id)) S.mdOpen.delete(id); else S.mdOpen.add(id); render(); break; }
+    case "cm-toggle": { const t = el.dataset.t; if(S.cmOpen.has(t)) S.cmOpen.delete(t); else S.cmOpen.add(t); render(); break; }
+    case "cm-send": guarded(() => sendComment(el.dataset.t, el.dataset.f)); break;
+    case "cm-del": {
+      const c = S.comments.find(x => x.id===id); const me = getMe(); if(!c || !(c.pid===me || isAdmin())) break;
+      if(S.armed!=="cm:"+id){ S.armed = "cm:"+id; toast("Nochmal tippen zum Löschen"); break; }
+      S.armed = null; guarded(async () => { await write(() => S.db.collection("comments").doc(id).delete()); }); break; }
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
@@ -2745,6 +2784,9 @@ document.addEventListener("input", e => {
   if(t.dataset.pf){ d.players[+t.dataset.pf].name = t.value; return; }
   if(t.dataset.gf){ d.guests[+t.dataset.gf].name = t.value; return; }
   if(t.dataset.sf){ const [i,j,side] = t.dataset.sf.split(":"); const v = t.value.replace(/\D/g,""); if(v!==t.value) t.value = v; d.matches[+i].sets[+j][side] = v==="" ? null : parseInt(v,10); return; }
+});
+document.addEventListener("keydown", e => {
+  const t = e.target; if(e.key==="Enter" && t?.dataset?.cm){ e.preventDefault(); guarded(() => sendComment(t.dataset.cm, t.id)); }
 });
 document.addEventListener("change", e => {
   const t = e.target;
@@ -2878,6 +2920,7 @@ function subscribe(){
     DB.collection("votes").onSnapshot(q => { S.votes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("surveys").onSnapshot(q => { S.surveys = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("svotes").onSnapshot(q => { S.svotes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
+    DB.collection("comments").onSnapshot(q => { S.comments = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("avatars").onSnapshot(q => { S.avatars = Object.fromEntries(q.docs.map(x => [x.id, x.data()])); render(); }, () => {}),
     DB.collection("doorcodes").onSnapshot(q => { S.doorcodes = Object.fromEntries(q.docs.map(x => [x.id, x.data()])); render(); }, () => {}),
     DB.collection("rides").onSnapshot(q => { S.rides = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
