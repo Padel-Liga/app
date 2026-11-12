@@ -413,6 +413,29 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .door.ask{background:var(--info-bg);border:1.5px solid var(--ball)}
 .door.ask .cp-t b{color:var(--ink);font-size:14px}
 .door-f{display:flex;gap:8px;margin-top:8px}.door-f .input{flex:1;min-height:38px;font-size:16px}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:3px;margin-bottom:12px}
+.seg button{border:0;background:transparent;border-radius:9px;min-height:36px;font-weight:600;font-size:14px;color:var(--muted);font-family:inherit}
+.seg button.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.me-name{font-size:22px;font-weight:800;letter-spacing:-.01em}
+.me-q{text-align:right}.me-q b{display:block;font-family:"Barlow Condensed",sans-serif;font-size:30px;line-height:1;color:var(--primary)}.me-q span{font-size:11.5px;color:var(--muted)}
+.sv{display:grid;gap:10px;border-left:4px solid var(--primary)}
+.sv-h{display:flex;justify-content:space-between;gap:8px;font-size:12px}.sv-k{font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.06em}.sv-l{color:var(--muted);font-weight:600}
+.sv-q{font-size:17px;font-weight:700;color:var(--ink)}
+.sv-opts{display:grid;gap:8px}
+.sv-o{position:relative;overflow:hidden;text-align:left;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 12px;font-family:inherit;display:grid;gap:6px;cursor:pointer}
+.sv-o.on{border-color:var(--primary)}
+.sv-bar{position:absolute;left:0;top:0;bottom:0;background:var(--info-bg);z-index:0}
+.sv-o.lead .sv-bar{background:color-mix(in srgb,var(--ball) 35%,var(--surface))}
+.sv-row,.sv-who{position:relative;z-index:1;display:flex;align-items:center;gap:8px}
+.sv-t{flex:1;font-weight:600;font-size:14.5px;color:var(--ink)}.sv-n{font-weight:800;font-size:16px;color:var(--ink)}
+.sv-av .avatar{width:20px;height:20px;font-size:9px;margin-right:-4px;border:1.5px solid var(--surface)}
+.sv-names{font-size:12px;color:var(--ink-2);margin-left:6px}
+.sv-f{font-size:12px;color:var(--muted)}
+.me-k{grid-template-columns:1fr 1fr}
+.sv{scroll-margin:90px;transition:box-shadow .3s}.sv.flash{box-shadow:0 0 0 3px var(--ball)}
+.sv.done{border-left-color:var(--line)}.sv-o[disabled]{cursor:default;opacity:1;color:inherit}
+.sv-banner{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:0;border-radius:14px;padding:12px 14px;margin-bottom:12px;background:var(--bad);color:#fff;font-family:inherit;cursor:pointer;box-shadow:0 4px 14px color-mix(in srgb,var(--bad) 35%,transparent)}
+.sv-banner svg{flex:none;width:18px;height:18px;color:#fff;stroke:#fff}.sv>.row{flex-wrap:nowrap;align-items:center}.sv>.row .btn{flex:none}.sv-bi{font-size:22px}.sv-bt{flex:1;min-width:0;display:grid;gap:2px}.sv-bt b{font-size:15px}.sv-bt span{font-size:12.5px;opacity:.9}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
 .cp-ic{font-size:18px}.cp-t{flex:1;font-size:13.5px;color:var(--ink-2)}.cp-t b{color:var(--ink)}
@@ -432,7 +455,7 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
     <button class="cd" id="cd" data-act="nav" data-view="home" hidden aria-label="Nächstes Spiel"></button>
     <nav class="tabs" aria-label="Bereiche">
       <button class="tab" data-act="nav" data-view="home" id="tab-home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10.5 12 3.5l8.5 7V19a1.5 1.5 0 0 1-1.5 1.5h-4.5v-6h-5v6H5A1.5 1.5 0 0 1 3.5 19v-8.5z"/></svg><span>Home</span></button>
-      <button class="tab" data-act="nav" data-view="tabelle" id="tab-tabelle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4zM17 6h3v1.5A3.5 3.5 0 0 1 16.5 11M7 6H4v1.5A3.5 3.5 0 0 0 7.5 11"/></svg><span>Tabelle</span></button>
+      <button class="tab" data-act="nav" data-view="tabelle" id="tab-tabelle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span>Ich</span></button>
       <button class="tab" data-act="nav" data-view="spieltage" id="tab-spieltage"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg><span>Spieltage</span></button>
       <button class="tab" data-act="nav" data-view="kasse" id="tab-kasse"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3"/><rect x="4" y="8" width="16.5" height="12" rx="2.5"/><path d="M16 14h1.5"/></svg><span>Kasse</span></button>
       <button class="tab" data-act="nav" data-view="einstellungen" id="tab-einstellungen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>Einstellungen</span></button>
@@ -465,7 +488,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.8";
+const APP_VERSION = "2026-11-12.9";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -495,7 +518,7 @@ async function importAll(obj){
   await b.commit(); return n;
 }
 
-const S = { broadcasts:[], votes:[], rides:[], doorcodes:{}, mdRaw:[], results:{},
+const S = { broadcasts:[], votes:[], rides:[], doorcodes:{}, surveys:[], svotes:[], tsub:"me", mdRaw:[], results:{},
   db:null, noDb:false, authUser:null, authChecked:false, denied:false, unsubs:[], readOnly:false, slow:false,
   config:null, matchdays:[], ledger:[],
   loaded:{config:false, md:false, lg:false},
@@ -726,7 +749,7 @@ function render(){
       ${canWrite() ? `<div class="row"><button class="btn primary" data-act="open-settings" id="btnSetup">Liga einrichten</button><button class="btn" data-act="open-import" id="btnImport">Daten aus alter App importieren</button></div>` : ""}</section>`;
   } else if(cfg){
 
-    if(S.view==="home"){ html += doorTop(); const c = funCard(); html += c || pollCard(); }
+    if(S.view==="home"){ html += doorTop() + surveyBanners(); const c = funCard(); html += c || pollCard(); }
     if(S.view==="home" || S.view==="spieltage") html += missingCard();
     html += ({home:viewHome, tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
   }
@@ -1130,7 +1153,7 @@ function viewHome(){
   const list = (ranked.length ? ranked : st.filter(x=>x.sp)).slice(0,6);
   const me = getMe();
   const mini = list.length ? `<section class="card">
-      <div class="card-head"><h2>Tabelle</h2><button class="btn ghost sm" data-act="nav" data-view="tabelle" id="btnFullTable">Ganze Tabelle ${ICON.chev}</button></div>
+      <div class="card-head"><h2>Tabelle</h2><button class="btn ghost sm" data-act="nav" data-view="tabelle" data-tsub="table" id="btnFullTable">Ganze Tabelle ${ICON.chev}</button></div>
       <div class="list">${list.map((x,i) => `<div class="li click" data-act="player" data-id="${esc(x.id)}" tabindex="0" style="cursor:pointer;padding:9px 0">
         <div class="who"><span class="rank" style="${ranked.length&&i===0?"background:var(--ball);color:var(--ball-ink)":""}">${ranked.length?i+1:"–"}</span>
           <div style="min-width:0"><div class="pname">${esc(pname(x.id))}${x.id===me?` <span class="pill info" style="vertical-align:1px">du</span>`:""}</div><div class="meta">${x.s}:${x.n} Siege · ${formHtml(x.form)}</div></div></div>
@@ -1208,6 +1231,81 @@ function doorCode(key, top){
   return `<div class="door ask"><span class="cp-ic">🔑</span><div class="cp-t"><b>Bitte Türcode eintragen</b>
       <div class="door-f"><input class="input" id="door-in" inputmode="text" maxlength="20" autocomplete="off" value="${esc(dc?.code||"")}" placeholder="Code"><button class="btn sm primary" data-act="door-save" data-key="${esc(key)}">Speichern</button></div></div></div>`;
 }
+/* ---------- Umfragen (immer offen: alle sehen, wer was gewählt hat) ---------- */
+const svRunning = s => (s.until||0) > Date.now();
+const surveysVisible = () => S.surveys.filter(s => svRunning(s) || Date.now() - (s.until||0) < 3*86400000).sort((a,b) => (svRunning(b)-svRunning(a)) || (b.at||0)-(a.at||0));
+function svLeft(s){
+  if(!svRunning(s)) return "beendet";
+  const ms = s.until - Date.now(), h = ms/3600000; const end = new Date(s.until);
+  if(h < 24 && end.toDateString()===new Date().toDateString()) return "endet heute " + end.toLocaleTimeString("de-DE",{hour:"2-digit",minute:"2-digit"});
+  const d = Math.ceil(h/24); return d<=1 ? "endet morgen" : `noch ${d} Tage`;
+}
+function surveyCard(s){
+  const me = getMe(); const run = svRunning(s);
+  const V = S.svotes.filter(v => v.sid===s.id && Number.isInteger(v.o) && v.o < (s.opts||[]).length);
+  const tot = V.length; const mine = V.find(v => v.pid===me)?.o;
+  const cnt = (s.opts||[]).map((_,i) => V.filter(v=>v.o===i).length); const max = Math.max(0,...cnt);
+  const canVote = run && me && canWrite();
+  const canDel = canWrite() && me && (me===s.by || isAdmin()); const armed = S.armed==="sv:"+s.id;
+  return `<section class="card sv ${run?"":"done"}" id="sv-${esc(s.id)}">
+    <div class="sv-h"><span class="sv-k">📊 Umfrage von ${esc(pname(s.by))}</span><span class="sv-l">${svLeft(s)}</span></div>
+    <div class="sv-q">${esc(s.q)}</div>
+    <div class="sv-opts">${(s.opts||[]).map((o,i) => { const who = V.filter(v=>v.o===i).sort((a,b)=>(a.t||0)-(b.t||0)).map(v=>v.pid); const n = who.length; const w = tot ? Math.round(n/tot*100) : 0;
+      return `<button class="sv-o ${mine===i?"on":""} ${n && n===max?"lead":""}" ${canVote?`data-act="sv-vote" data-id="${esc(s.id)}" data-o="${i}"`:"disabled"}><span class="sv-bar" style="width:${w}%"></span>
+        <span class="sv-row"><span class="sv-t">${mine===i?"✓ ":""}${esc(o)}</span><span class="sv-n">${n}</span></span>
+        ${n?`<span class="sv-who">${who.map(id=>`<span class="sv-av">${avatar(id)}</span>`).join("")}<span class="sv-names">${who.map(id=>esc(pname(id))).join(", ")}</span></span>`:""}</button>`; }).join("")}</div>
+    <div class="row between" style="gap:8px"><div class="sv-f">${tot} ${tot===1?"Stimme":"Stimmen"}${run ? (canVote ? (mine!=null ? " · Tippe auf eine andere Antwort, um umzustimmen" : " · Tippe auf eine Antwort") : "") : " · Abstimmung beendet"}</div>
+      ${canDel ? `<button class="btn sm ${armed?"danger armed":"ghost"}" style="${armed?"":"color:var(--muted)"}" data-act="sv-del" data-id="${esc(s.id)}">${armed?"Wirklich löschen?":"Löschen"}</button>` : ""}</div>
+  </section>`;
+}
+function surveyBanners(){
+  return S.surveys.filter(svRunning).sort((a,b)=>(b.at||0)-(a.at||0)).map(s => {
+    const voted = S.svotes.some(v => v.sid===s.id && v.pid===getMe());
+    return `<button class="sv-banner" data-act="nav" data-view="tabelle" data-tsub="me" data-sv="${esc(s.id)}">
+      <span class="sv-bi">📊</span><span class="sv-bt"><b>Umfrage: ${esc(s.q)}</b><span>von ${esc(pname(s.by))} · ${svLeft(s)}${voted ? " · du hast abgestimmt" : " · jetzt abstimmen"}</span></span>${ICON.chev}</button>`; }).join("");
+}
+function modalSurvey(){
+  const d = S.draft;
+  return { title:"Neue Umfrage", html:`
+    <div class="field"><label for="sv-q">Frage</label><input class="input" id="sv-q" data-f="q" value="${esc(d.q)}" maxlength="120" placeholder="z. B. Wo gehen wir nach dem Spiel hin?" autocomplete="off"></div>
+    <div class="field"><span class="lbl">Antworten (max. 3)</span>
+      ${[0,1,2].map(i => `<input class="input" id="sv-o${i}" data-f="o${i}" value="${esc(d["o"+i])}" maxlength="60" placeholder="Antwort ${i+1}${i===2?" (optional)":""}" autocomplete="off" style="margin-top:${i?8:0}px">`).join("")}</div>
+    <div class="field"><span class="lbl">Läuft</span><div class="chips">
+      ${[[1,"1 Tag"],[3,"3 Tage"],[7,"1 Woche"]].map(([k,l]) => `<button class="chip" data-act="sv-days" data-k="${k}" aria-pressed="${d.days===k}">${l}</button>`).join("")}</div></div>
+    <p class="note" style="margin:0">Alle sehen, wer was gewählt hat. Solange die Umfrage läuft, steht oben auf der Startseite ein Hinweis, und alle außer dir bekommen eine Push-Nachricht.</p>`,
+    foot:`<span></span><button class="btn primary" data-act="sv-save" id="btnSvSave">Umfrage starten</button>` };
+}
+function viewMe(){
+  const me = getMe(); if(!me) return "";
+  const P = playerStats(me); const st = standings(); const ranked = st.filter(x=>x.ok); const rk = ranked.findIndex(x=>x.id===me);
+  const sp = P.list.length; const q = sp ? (P.wins + P.draws/2)/sp : 0; const E = eloC();
+  const bestP = P.partners.filter(x=>x.sp>=2)[0] || P.partners[0];
+  const nemesis = [...P.opps].filter(x=>x.sp>=2).sort((a,b)=>a.s/a.sp-b.s/b.sp || a.gd-b.gd)[0];
+  const streak = !P.curType ? "–" : `${P.curLen} ${P.curType==="S" ? (P.curLen===1?"Sieg":"Siege") : (P.curLen===1?"Niederlage":"Niederlagen")}`;
+  return `
+  <section class="card me-head">
+    <div class="row" style="gap:14px;flex-wrap:nowrap">${avatar(me,true)}<div style="min-width:0;flex:1">
+      <div class="me-name">${esc(pname(me))}</div>
+      <div class="muted small">${rk>=0?`Platz ${rk+1} von ${ranked.length}`:"noch nicht gewertet"} · Elo ${E.rating(me)}</div>
+      <div style="margin-top:6px">${formHtml(P.list.map(x=>x.res))}</div></div>
+      <div class="me-q"><b>${pct(q)}</b><span>Siegquote</span></div></div>
+    <div class="kpis me-k" style="margin-top:14px">
+      <div class="kpi"><b>${sp}</b><span>Matches</span></div>
+      <div class="kpi"><b>${P.wins}:${P.losses}</b><span>Siege : Niederl.</span></div>
+      <div class="kpi"><b>${P.dayWins}</b><span>Tagessiege</span></div>
+      <div class="kpi"><b>${P.days}/${playedDays()}</b><span>Spieltage dabei</span></div>
+    </div>
+    <div class="facts" style="margin-top:8px">
+      <div class="fact"><div class="t">Aktuelle Serie</div><div class="v">${streak}</div></div>
+      <div class="fact"><div class="t">Längste Siegserie</div><div class="v">${P.best||"–"}</div></div>
+      <div class="fact"><div class="t">Bester Partner</div><div class="v">${bestP?`${esc(pname(bestP.id))} · ${Math.round(bestP.s/bestP.sp*100)} %`:"–"}</div></div>
+      <div class="fact"><div class="t">Angstgegner</div><div class="v">${nemesis?`${esc(pname(nemesis.id))} · ${Math.round(nemesis.s/nemesis.sp*100)} %`:"–"}</div></div>
+    </div>
+    <button class="btn" style="width:100%;margin-top:12px" data-act="player" data-id="${esc(me)}">Alle Statistiken & Verlauf ${ICON.chev}</button>
+  </section>
+  <div class="card-head" style="margin:18px 2px 8px"><h2>Umfragen</h2>${canWrite()?`<button class="btn primary sm" data-act="sv-new" id="btnSvNew">📊 Neue Umfrage</button>`:""}</div>
+  ${(() => { const L = surveysVisible(); return L.length ? L.map(surveyCard).join("") : `<section class="card"><div class="muted small">Gerade läuft keine Umfrage. Starte eine – zu welchem Thema auch immer.</div></section>`; })()}`;
+}
 function funCard(){
   if(!S.config) return "";
   const ns = nextSession(); if(!ns || ns.key !== today()) return "";
@@ -1227,6 +1325,11 @@ function funCard(){
   </section>`;
 }
 function viewTable(){
+  if(!getMe()) return viewTableFull();
+  const seg = `<div class="seg">${[["me","Mein Bereich"],["table","Tabelle"]].map(([k,l]) => `<button class="${S.tsub===k?"on":""}" data-act="tsub" data-k="${k}">${l}</button>`).join("")}</div>`;
+  return seg + (S.tsub==="table" ? viewTableFull() : viewMe());
+}
+function viewTableFull(){
   const st = standings();
   const matches = S.matchdays.reduce((s,md) => s + (md.matches||[]).filter(m=>result(m).played).length, 0);
   if(!matches){
@@ -1423,6 +1526,7 @@ const PUSH_TYPES = [
   ["unfull","⚠️ Spiel nicht mehr komplett (Absage)"],
   ["moveup","↑ Ich bin von der Warteliste nachgerückt"],
   ["noon","🎾 Matchday-Fakten um 12 Uhr am Spieltag"],
+  ["survey","📊 Neue Umfrage gestartet"],
   ["reminder","⏰ Erinnerung 1 Stunde vor dem Spiel"],
   ["missing","📝 Ergebnisse fehlen noch"],
   ["resconf","🎾 Ergebnis wartet auf meine Bestätigung"],
@@ -1914,7 +2018,7 @@ function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = tru
 function renderModal(first){
   S._elo = null;
   const body = $("sheetBody"); const top = body.scrollTop;
-  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed, alerts:modalAlerts, res:modalRes, bc:modalBc}[S.modal];
+  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed, alerts:modalAlerts, res:modalRes, bc:modalBc, sv:modalSurvey}[S.modal];
   if(!fn) return;
   const {title, html, foot} = fn();
   $("sheetTitle").textContent = title; body.innerHTML = html; $("sheetFoot").innerHTML = foot;
@@ -2178,9 +2282,13 @@ async function saveCost(){
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if(!el || el.disabled) return;
   const a = el.dataset.act, id = el.dataset.id, d = S.draft;
-  if(a!=="del-led" && a!=="md-delete" && a!=="mem-del" && a!=="bc-del") S.armed = null;
+  if(a!=="del-led" && a!=="md-delete" && a!=="mem-del" && a!=="bc-del" && a!=="sv-del") S.armed = null;
   switch(a){
-    case "nav": S.view = el.dataset.view; history.replaceState(null,"","#"+S.view); render(); break;
+    case "nav": S.view = el.dataset.view; if(el.dataset.tsub) S.tsub = el.dataset.tsub; history.replaceState(null,"","#"+S.view); render();
+      if(el.dataset.sv) setTimeout(() => { const c = document.getElementById("sv-"+el.dataset.sv); if(c){ c.scrollIntoView({behavior:"smooth", block:"center"}); c.classList.add("flash"); setTimeout(()=>c.classList.remove("flash"),1600); } }, 60);
+      else window.scrollTo(0,0);
+      break;
+    case "tsub": S.tsub = el.dataset.k; render(); break;
     case "close": closeModal(); break;
     case "cal": openModal("cal", {key: el.dataset.key}); break;
     case "cal-copy": navigator.clipboard?.writeText($("calUrl")?.value||"").then(() => toast("Link kopiert, jetzt in Safari einfügen"), () => { $("calUrl")?.select(); toast("Link markiert, jetzt kopieren"); }); break;
@@ -2284,6 +2392,27 @@ document.addEventListener("click", e => {
       if(!code){ toast("Bitte einen Code eingeben."); break; }
       guarded(async () => { const ok = await write(() => S.db.collection("doorcodes").doc(key).set({code, by:getMe(), at:Date.now()}));
         if(ok){ S.doorEdit = null; toast("Türcode gespeichert"); render(); } }); break; }
+    case "sv-new": openModal("sv", {q:"", o0:"", o1:"", o2:"", days:3}); break;
+    case "sv-days": d.days = Number(el.dataset.k); renderModal(); break;
+    case "sv-save": {
+      const me = getMe(); if(!me){ toast("Bitte zuerst dein Gerät freigeben lassen."); break; }
+      const q = (d.q||"").trim(); const opts = [d.o0,d.o1,d.o2].map(x => (x||"").trim()).filter(Boolean);
+      if(q.length < 3){ toast("Bitte eine Frage eingeben."); break; }
+      if(opts.length < 2){ toast("Bitte mindestens zwei Antworten eingeben."); break; }
+      if(new Set(opts.map(x=>x.toLowerCase())).size !== opts.length){ toast("Die Antworten müssen verschieden sein."); break; }
+      const now = Date.now();
+      guarded(async () => { const ok = await write(() => S.db.collection("surveys").doc(uid()).set({q, opts, by:me, at:now, until: now + (d.days||3)*86400000}));
+        if(ok){ closeModal(); toast("Umfrage gestartet · alle bekommen eine Push-Nachricht"); } }); break; }
+    case "sv-vote": {
+      const me = getMe(); const s = S.surveys.find(x=>x.id===id); if(!me || !s || !svRunning(s)) break;
+      const o = Number(el.dataset.o); const ref = S.db.collection("svotes").doc(id+"_"+me);
+      const cur = S.svotes.find(v => v.sid===id && v.pid===me)?.o;
+      guarded(async () => { await write(() => cur===o ? ref.delete() : ref.set({sid:id, pid:me, o, t:Date.now()})); }); break; }
+    case "sv-del": {
+      const s = S.surveys.find(x=>x.id===id); const me = getMe(); if(!s || !(me===s.by || isAdmin())) break;
+      if(S.armed!=="sv:"+id){ S.armed = "sv:"+id; render(); break; }
+      S.armed = null;
+      guarded(async () => { const ok = await write(() => S.db.collection("surveys").doc(id).delete()); if(ok) toast("Umfrage gelöscht"); }); break; }
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
@@ -2537,6 +2666,8 @@ function subscribe(){
     DB.collection("matchdays").onSnapshot(q => { S.mdRaw = q.docs.map(x => ({...x.data(), id:x.id})); mergeResults(); S.loaded.md = true; if(!q.metadata.fromCache) fresh.md = true; done(); render(); }, onErr),
     DB.collection("ledger").onSnapshot(q => { S.ledger = q.docs.map(x => ({...x.data(), id:x.id})); S.loaded.lg = true; if(!q.metadata.fromCache) fresh.lg = true; done(); render(); }, onErr),
     DB.collection("votes").onSnapshot(q => { S.votes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
+    DB.collection("surveys").onSnapshot(q => { S.surveys = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
+    DB.collection("svotes").onSnapshot(q => { S.svotes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("doorcodes").onSnapshot(q => { S.doorcodes = Object.fromEntries(q.docs.map(x => [x.id, x.data()])); render(); }, () => {}),
     DB.collection("rides").onSnapshot(q => { S.rides = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.doc("system/push").onSnapshot(sn => { S.pushRun = sn.exists ? (sn.data().lastRun || null) : null; render(); }, () => {}),
