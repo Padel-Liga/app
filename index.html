@@ -542,7 +542,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.13";
+const APP_VERSION = "2026-11-12.14";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -743,9 +743,19 @@ function balPill(b){
 /* ---------- Ansichten ---------- */
 function alertCount(){ if(!isActive(S.member)) return 0; return S.requests.length + (isBankMe() ? pendingLed().length : 0) + pendingResultsForMe().length; }
 addEventListener("scroll", () => document.body.classList.toggle("scrolled", scrollY > 80 && innerHeight + scrollY < document.documentElement.scrollHeight - 40), {passive:true});
+/* Rote Zahl am App-Symbol: beim Öffnen auf die offenen Aufgaben setzen (oder löschen) */
+function syncBadge(){
+  if(!("setAppBadge" in navigator)) return;
+  try{ caches?.delete("padel-badge"); }catch{}
+  const me = getMe();
+  const n = (S.member ? alertCount() : 0) + (me ? S.surveys.filter(s => svRunning(s) && !S.svotes.some(v => v.sid===s.id && v.pid===me)).length : 0);
+  (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+}
+document.addEventListener("visibilitychange", () => { if(!document.hidden) syncBadge(); });
 function updateAlarm(){
   const el = $("alarm"); if(!el) return; const n = alertCount();
   el.hidden = !n; document.body.classList.toggle("has-alarm", !!n);
+  if(!document.hidden) syncBadge();
   if(n){ const parts = []; if(S.requests.length) parts.push(S.requests.length===1?"Freigabe":"Freigaben"); if(isBankMe() && pendingLed().length) parts.push(pendingLed().length===1?"Zahlung":"Zahlungen"); if(pendingResultsForMe().length) parts.push(pendingResultsForMe().length===1?"Ergebnis":"Ergebnisse");
     el.innerHTML = `<span aria-hidden="true">🔔</span><span class="al-t">${parts.join(" & ")} bestätigen</span><span class="n">${n}</span>`; }
   if(S.modal==="alerts"){ if(n) renderModal(); else closeModal(); }

@@ -1,6 +1,17 @@
 /* Service Worker für Push-Benachrichtigungen (Firebase Cloud Messaging).
    Benachrichtigungen mit "notification"-Inhalt zeigt Firebase automatisch an;
    ein Tipp darauf öffnet die App (Link aus fcmOptions). */
+/* App-Symbol-Zähler (rote Zahl am Homescreen-Symbol): jede Push-Nachricht zählt +1,
+   beim Öffnen der App wird der Zähler zurückgesetzt. */
+async function bumpBadge(){
+  try{
+    const c = await caches.open("padel-badge"); const r = await c.match("n");
+    const n = (r ? parseInt(await r.text(), 10) || 0 : 0) + 1;
+    await c.put("n", new Response(String(n)));
+    if(self.navigator && navigator.setAppBadge) await navigator.setAppBadge(n);
+  }catch(e){}
+}
+self.addEventListener("push", event => { event.waitUntil(bumpBadge()); });
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
 
