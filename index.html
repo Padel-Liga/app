@@ -403,6 +403,7 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .tk-who{font-size:13px;font-weight:700;color:var(--primary);margin-top:4px}
 .tk-q{font-size:12px;color:var(--muted)}
 .cp{border-top:1px solid var(--line);margin:0 14px;padding:12px 0 16px;display:grid;gap:8px}
+.card>.cp{margin:0;padding:12px 0 0}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
 .cp-ic{font-size:18px}.cp-t{flex:1;font-size:13.5px;color:var(--ink-2)}.cp-t b{color:var(--ink)}
@@ -455,7 +456,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.4";
+const APP_VERSION = "2026-11-12.5";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -856,6 +857,7 @@ function pollCard(){
     <div class="slots">${[0,1,2,3].map(i => { const id = P.play[i]; if(!id) return `<div class="slot">Platz ${i+1}<br>frei</div>`;
       const moved = pollNotices(ns.key).some(n => n.in===id);
       return `<div class="slot on" ${moved?`style="border-color:var(--primary)"`:""}>${avatar(id)}<span>${esc(pname(id))}${isGuest(id)?`<br><span class="gtag" style="margin:0">Gast</span>`:""}${moved?`<br><span class="gtag" style="margin:0;color:var(--primary)">nachgerückt</span>`:""}</span></div>`; }).join("")}</div>
+    ${P.play.length && !funCard() ? carpool(ns.key, P.play) : ""}
     <div class="vlist">
       ${P.play.some(isGuest)?`<div class="vrow"><span class="k">Gäste</span><span>${names(P.play.filter(isGuest))}</span></div>`:""}
       ${P.wait.length?`<div class="vrow"><span class="k">Warteliste</span><span>${names(P.wait)}</span></div>`:""}
