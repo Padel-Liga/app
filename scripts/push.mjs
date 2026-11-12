@@ -198,7 +198,7 @@ for(const r of requests)
   queue(`req:${r.id}`, "📱 Neues Gerät", `${r.name || "Jemand"} möchte der Liga beitreten.`, forType("devices"));
 // Mitteilungen von Michael
 const ADMIN_PIDS = ["teryeoc8"];
-for(const b of broadcasts.filter(b => b.status==="queued" && ADMIN_PIDS.includes(b.by))){
+for(const b of broadcasts.filter(b => b.status==="queued" && ADMIN_PIDS.includes(b.by) && !((b.sendAt||0) > Date.now()))){
   const toOk = m => b.to==="all" ? true : b.to==="players" ? players.some(p=>p.id===m.pid) : Array.isArray(b.to) && b.to.includes(m.pid);
   const rec = forType("news", m => toOk(m) && m.pid !== b.by);
   outbox.push({key:`bc:${b.id}`, title: "📣 " + (b.title || `Nachricht von ${pname(b.by)}`), body: b.body, to: rec, broadcast: b.id});

@@ -456,7 +456,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.5";
+const APP_VERSION = "2026-11-12.6";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1069,7 +1069,8 @@ const ICON = {
 /* ---------- Mitteilungen von Michael (Admin) ---------- */
 const ADMIN_PIDS = ["teryeoc8"];   // Michael
 const isAdmin = () => ADMIN_PIDS.includes(getMe());
-const recentBroadcasts = () => S.broadcasts.filter(b => Date.now() - (b.at||0) < 3*86400000 && (b.to==="all" || (Array.isArray(b.to) && b.to.includes(getMe())) || ADMIN_PIDS.includes(getMe()))).sort((a,b)=>(b.at||0)-(a.at||0));
+const bcPlanned = b => b.status!=="sent" && (b.sendAt||0) > Date.now();
+const recentBroadcasts = () => S.broadcasts.filter(b => !bcPlanned(b) && Date.now() - (b.at||0) < 3*86400000 && (b.to==="all" || (Array.isArray(b.to) && b.to.includes(getMe())) || ADMIN_PIDS.includes(getMe()))).sort((a,b)=>(b.at||0)-(a.at||0));
 function broadcastCards(){
   const L = recentBroadcasts().slice(0,2); if(!L.length) return "";
   return L.map(b => `<section class="card" style="border-left:4px solid var(--ball);display:grid;gap:6px">
@@ -1086,12 +1087,14 @@ function bcDelBtn(b){
 }
 function broadcastSection(){
   if(!isAdmin()) return "";
-  const hist = [...S.broadcasts].sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,5);
-  const content = `<p class="muted small" style="margin:0 0 10px">Schreibe eine eigene Nachricht. Sie geht als Push an alle mit aktivierten Benachrichtigungen und steht 3 Tage lang auf der Home-Seite.</p>
+  const planned = S.broadcasts.filter(bcPlanned).sort((a,b)=>a.sendAt-b.sendAt);
+  const hist = [...planned, ...S.broadcasts.filter(b => !bcPlanned(b)).sort((a,b)=>(b.at||0)-(a.at||0)).slice(0,5)];
+  const when = t => new Date(t||0).toLocaleString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"});
+  const content = `<p class="muted small" style="margin:0 0 10px">Schreibe eine eigene Nachricht – sofort oder zu einem geplanten Zeitpunkt. Sie geht als Push an alle mit aktivierten Benachrichtigungen und steht danach 3 Tage lang auf der Home-Seite.</p>
     <button class="btn primary" data-act="bc-new" id="btnBcNew">📣 Neue Nachricht schreiben</button>
-    ${hist.length ? `<div class="lbl" style="margin:14px 0 2px">Zuletzt gesendet</div><div class="list">${hist.map(b => `<div class="li"><div style="min-width:0"><div class="pname">${esc(b.title || b.body.slice(0,40))}</div>
-      <div class="meta">${esc(new Date(b.at||0).toLocaleString("de-DE",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}))} · an ${b.to==="all" ? "alle" : b.to==="players" ? "Liga-Spieler" : (b.to||[]).length + " Personen"}</div></div>
-      <div class="amt"><span class="pill ${b.status==="sent"?"good":"neutral"}">${b.status==="sent" ? `gesendet${b.count!=null?" · "+b.count:""}` : "wird gesendet …"}</span>${bcDelBtn(b).replace("margin-left:-11px","")}</div></div>`).join("")}</div>` : ""}`;
+    ${hist.length ? `<div class="lbl" style="margin:14px 0 2px">${planned.length ? "Geplant & zuletzt gesendet" : "Zuletzt gesendet"}</div><div class="list">${hist.map(b => `<div class="li"><div style="min-width:0"><div class="pname">${esc(b.title || b.body.slice(0,40))}</div>
+      <div class="meta">${esc(when(b.at))} · an ${b.to==="all" ? "alle" : b.to==="players" ? "Liga-Spieler" : (b.to||[]).length + " Personen"}</div></div>
+      <div class="amt"><span class="pill ${b.status==="sent"?"good":bcPlanned(b)?"info":"neutral"}">${b.status==="sent" ? `gesendet${b.count!=null?" · "+b.count:""}` : bcPlanned(b) ? "⏰ geplant" : "wird gesendet …"}</span>${bcDelBtn(b).replace("margin-left:-11px","")}</div></div>`).join("")}</div>` : ""}`;
   return accSection("bc","📣","Nachricht an alle", "Push an die Liga schicken", "", content);
 }
 function modalBc(){
@@ -1102,8 +1105,11 @@ function modalBc(){
     <div class="field"><span class="lbl">Empfänger</span><div class="chips">
       ${[["all","Alle"],["players","Nur Liga-Spieler"],["pick","Auswählen"]].map(([k,l]) => `<button class="chip" data-act="bc-to" data-k="${k}" aria-pressed="${d.to===k}">${l}</button>`).join("")}</div>
       ${d.to==="pick" ? `<div class="chips" style="margin-top:8px">${ids.map(id => `<button class="chip" data-act="bc-pick" data-id="${esc(id)}" aria-pressed="${d.pick.includes(id)}">${esc(pname(id))}${isGuest(id)?`<span class="gtag">Gast</span>`:""}</button>`).join("")}</div>` : ""}</div>
-    <p class="note" style="margin:0">Die Nachricht kommt in den nächsten 2–3 Minuten als Push und steht 3 Tage auf der Home-Seite.</p>`,
-    foot:`<span></span><button class="btn primary" data-act="bc-send" id="btnBcSend">Senden</button>` };
+    <div class="field"><span class="lbl">Wann senden?</span><div class="chips">
+      ${[["now","Sofort"],["later","Später planen"]].map(([k,l]) => `<button class="chip" data-act="bc-when" data-k="${k}" aria-pressed="${d.when===k}">${l}</button>`).join("")}</div>
+      ${d.when==="later" ? `<div class="grid2" style="margin-top:8px"><input class="input" type="date" id="bc-date" data-f="sdate" value="${esc(d.sdate)}" min="${today()}" aria-label="Datum"><input class="input" type="time" id="bc-time" data-f="stime" value="${esc(d.stime)}" step="300" aria-label="Uhrzeit"></div>` : ""}</div>
+    <p class="note" style="margin:0">${d.when==="later" ? "Die Nachricht geht zum geplanten Zeitpunkt raus (bis zu 2–3 Minuten später) und erscheint erst dann auf der Home-Seite. Bis dahin kannst du sie unter Einstellungen wieder löschen." : "Die Nachricht kommt in den nächsten 2–3 Minuten als Push und steht 3 Tage auf der Home-Seite."}</p>`,
+    foot:`<span></span><button class="btn primary" data-act="bc-send" id="btnBcSend">${d.when==="later" ? "Planen" : "Senden"}</button>` };
 }
 
 /* Startseite: aktuelle Abstimmung und Kurz-Tabelle */
@@ -2157,15 +2163,23 @@ document.addEventListener("click", e => {
       if(S.armed!=="bc:"+id){ S.armed = "bc:"+id; render(); break; }
       S.armed = null;
       guarded(async () => { const ok = await write(() => S.db.collection("broadcasts").doc(id).delete()); if(ok) toast("Mitteilung gelöscht"); }); break;
-    case "bc-new": openModal("bc", {title:"", body:"", to:"all", pick:[]}); break;
+    case "bc-new": { const t = new Date(Date.now() + 3600000); openModal("bc", {title:"", body:"", to:"all", pick:[], when:"now", sdate: new Date(t.getTime()-t.getTimezoneOffset()*60000).toISOString().slice(0,10), stime: String(t.getHours()).padStart(2,"0")+":00"}); break; }
+    case "bc-when": d.when = el.dataset.k; renderModal(); break;
     case "bc-to": d.to = el.dataset.k; renderModal(); break;
     case "bc-pick": { const i = d.pick.indexOf(id); if(i>=0) d.pick.splice(i,1); else d.pick.push(id); renderModal(); break; }
     case "bc-send": {
       const body = (d.body||"").trim(); if(body.length < 2){ toast("Bitte eine Nachricht schreiben."); break; }
       if(d.to==="pick" && !d.pick.length){ toast("Bitte mindestens einen Empfänger wählen."); break; }
       const to = d.to==="pick" ? [...d.pick] : d.to;
-      guarded(async () => { const ok = await write(() => S.db.collection("broadcasts").doc(uid()).set({title:(d.title||"").trim(), body, to, by:getMe(), at:Date.now(), status:"queued"}));
-        if(ok){ closeModal(); toast("Wird gesendet · kommt in 2–3 Minuten an"); } }); break; }
+      let sendAt = null;
+      if(d.when==="later"){
+        const t = new Date(`${d.sdate}T${d.stime||""}`);
+        if(!d.sdate || !/^\d{1,2}:\d{2}$/.test(d.stime||"") || isNaN(t)){ toast("Bitte Datum und Uhrzeit angeben."); break; }
+        if(t.getTime() < Date.now() + 60000){ toast("Der Zeitpunkt muss in der Zukunft liegen."); break; }
+        sendAt = t.getTime();
+      }
+      guarded(async () => { const ok = await write(() => S.db.collection("broadcasts").doc(uid()).set({title:(d.title||"").trim(), body, to, by:getMe(), at: sendAt || Date.now(), status:"queued", ...(sendAt ? {sendAt} : {})}));
+        if(ok){ closeModal(); toast(sendAt ? "Geplant für " + new Date(sendAt).toLocaleString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) + " Uhr" : "Wird gesendet · kommt in 2–3 Minuten an"); } }); break; }
     case "res-enter": openModal("res", {md: el.dataset.md, mid: el.dataset.mid, a:"", b:""}); break;
     case "res-save": {
       const a = parseInt(d.a,10), b = parseInt(d.b,10);
