@@ -55,7 +55,7 @@ async function all(coll){ const q = await db.collection(`${base}/${coll}`).get()
 const cfgSnap = await db.doc(`${base}/league/config`).get();
 if(!cfgSnap.exists){ console.log("Keine Liga-Konfiguration."); process.exit(0); }
 const cfg = cfgSnap.data();
-const [members, votes, matchdays, ledger, requests, results, broadcasts, surveys, comments] = await Promise.all(["members","votes","matchdays","ledger","requests","results","broadcasts","surveys","comments"].map(all));
+const [members, votes, matchdays, ledger, requests, results, broadcasts, surveys, comments, pinpays] = await Promise.all(["members","votes","matchdays","ledger","requests","results","broadcasts","surveys","comments","pinpays"].map(all));
 const resById = Object.fromEntries(results.map(r => [r.id, r]));
 const stateRef = db.doc(`${base}/system/push`);
 const state = (await stateRef.get()).data() || {};
@@ -210,6 +210,12 @@ for(const s of surveys.filter(s => (s.until||0) > Date.now() && Date.now() - (s.
 for(const c of comments.filter(c => typeof c.text==="string" && Date.now() - (c.at||0) < 3600000)){
   const where = (c.t||"").startsWith("sv:") ? `Umfrage „${(surveys.find(s => "sv:"+s.id===c.t)?.q || "").slice(0,40)}“` : "Abstimmung";
   queue(`cm:${c.id}`, `💬 ${pname(c.pid)} · ${where}`, c.text.slice(0,140), forType("comment", m => m.pid !== c.pid));
+}
+// Sammelzahlung (angepinnter PayPal-Link): Meldung "bezahlt" an den Empfänger
+if(cfg.pin && cfg.pin.url){
+  const owner = cfg.pin.by || ADMIN_PIDS[0]; const key = String(cfg.pin.at||0);
+  for(const x of pinpays.filter(x => x.pin===key && x.status==="paid"))
+    queue(`pinpay:${x.id}`, `💶 ${cfg.pin.title || "Zahlung"}`, `${pname(x.pid)} hat bezahlt. Bitte prüfen und bestätigen.`, forType("confirm", m => m.pid===owner));
 }
 // Test-Nachrichten
 const tests = members.filter(m => m.pushTest && m.pushToken && m.active !== false);

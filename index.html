@@ -524,6 +524,14 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .pin-b .btn.primary{background:#0070BA !important;border-color:#0070BA !important;color:#fff !important;text-decoration:none}
 .pin-x{border:1px solid var(--line);background:var(--surface-2);border-radius:50%;width:30px;height:30px;color:var(--muted);font-weight:800;cursor:pointer;flex:none}
 .pin-cur{display:flex;align-items:center;gap:10px;justify-content:space-between;background:var(--surface-2);border-radius:10px;padding:8px 10px;margin-bottom:8px}
+.pin-b{display:grid !important;gap:8px}
+.pin-top{display:flex;align-items:center;gap:10px}
+.pin-mid{display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:8px}
+.pin-prog{border:0;background:none;font:600 12.5px var(--font);color:var(--muted);display:flex;align-items:center;gap:4px;cursor:pointer;margin-left:auto;padding:4px 0}.pin-prog .md-chev svg{width:15px;height:15px}
+.pin-s{font-size:12.5px;font-weight:700}.pin-s.ok{color:var(--good)}.pin-s.wait{color:#8A5A00}.pin-s.no{color:var(--muted);font-weight:600}
+.pin-list{display:grid;border-top:1px solid var(--line)}
+.pin-li{display:flex;align-items:center;gap:10px;padding:7px 0}.pin-li+.pin-li{border-top:1px dashed var(--line)}
+.pin-li .avatar{width:28px;height:28px;font-size:11px}.pin-n{flex:1;font-weight:600;font-size:14px}
 .live-r{display:grid;gap:10px;border:1.5px solid var(--primary) !important}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
@@ -578,7 +586,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-13.6";
+const APP_VERSION = "2026-11-13.7";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -608,7 +616,7 @@ async function importAll(obj){
   await b.commit(); return n;
 }
 
-const S = { broadcasts:[], votes:[], rides:[], doorcodes:{}, avatars:{}, comments:[], cmOpen:new Set(), surveys:[], svotes:[], tsub:"me", mdRaw:[], results:{},
+const S = { broadcasts:[], votes:[], rides:[], doorcodes:{}, avatars:{}, comments:[], pinpays:[], cmOpen:new Set(), surveys:[], svotes:[], tsub:"me", mdRaw:[], results:{},
   db:null, noDb:false, authUser:null, authChecked:false, denied:false, unsubs:[], readOnly:false, slow:false,
   config:null, matchdays:[], ledger:[],
   loaded:{config:false, md:false, lg:false},
@@ -1577,8 +1585,28 @@ async function sendComment(target, fid){
 /* ---------- Angepinnter Zahlungslink (z. B. Bälle-Bestellung), gesetzt von Michael ---------- */
 function pinBanner(){
   const pin = S.config?.pin; if(!pin?.url || !/^https:\/\//.test(pin.url)) return "";
-  return `<section class="pin-b"><span class="pin-i">💶</span><div class="pin-t"><b>${esc(pin.title||"Zahlung")}</b><span>${pin.amount ? esc(pin.amount)+" · " : ""}bitte per PayPal bezahlen</span></div>
-    <a class="btn sm primary" href="${esc(pin.url)}" target="_blank" rel="noopener">PayPal ›</a></section>`;
+  const me = getMe(); const owner = pin.by || ADMIN_PIDS[0]; const key = String(pin.at||0);
+  const payers = players().map(p => p.id).filter(id => id !== owner);
+  const st = id => S.pinpays.find(x => x.pin===key && x.pid===id)?.status || "";
+  const paidN = payers.filter(id => st(id)).length, confN = payers.filter(id => st(id)==="confirmed").length;
+  // alle haben bezahlt (und bestätigt): Hinweis bleibt noch 5 Stunden, dann verschwindet er für alle
+  if(payers.length && confN===payers.length){
+    const last = Math.max(...S.pinpays.filter(x => x.pin===key && payers.includes(x.pid)).map(x => x.confirmedAt||x.t||0));
+    if(Date.now() > last + 5*3600000) return "";
+  }
+  const mine = payers.includes(me) ? st(me) : null;
+  const open = S.pinOpen || me===owner;
+  const myRow = mine===null ? "" : !mine ? `<button class="btn sm" data-act="pp-paid">Ich habe bezahlt</button>`
+    : mine==="paid" ? `<span class="pin-s wait">✓ gemeldet · wartet auf ${esc(pname(owner))}</span>` : `<span class="pin-s ok">✓ bezahlt & bestätigt</span>`;
+  const list = payers.map(id => { const x = st(id);
+    const right = x==="confirmed" ? `<span class="pin-s ok">bestätigt</span>`
+      : x==="paid" ? (me===owner && canWrite() ? `<button class="btn sm primary" data-act="pp-conf" data-id="${esc(id)}">Bestätigen</button>` : id===me && canWrite() ? `<button class="btn sm ghost" data-act="pp-undo">Zurücknehmen</button>` : `<span class="pin-s wait">gemeldet</span>`)
+      : `<span class="pin-s no">offen</span>`;
+    return `<div class="pin-li">${avatar(id)}<span class="pin-n">${esc(pname(id))}</span>${right}</div>`; }).join("");
+  return `<section class="pin-b"><div class="pin-top"><span class="pin-i">💶</span><div class="pin-t"><b>${esc(pin.title||"Zahlung")}</b><span>${pin.amount ? esc(pin.amount)+" · " : ""}bitte per PayPal an ${esc(pname(owner))}</span></div>
+    <a class="btn sm primary" href="${esc(pin.url)}" target="_blank" rel="noopener">PayPal ›</a></div>
+    <div class="pin-mid">${myRow}<button class="pin-prog" data-act="pin-list">${confN===payers.length ? "✓ alle bezahlt" : `${paidN} von ${payers.length} bezahlt`}${confN<paidN ? ` · ${paidN-confN} unbestätigt` : ""} <span class="md-chev" style="${open?"transform:rotate(90deg)":""}">${ICON.chev}</span></button></div>
+    ${open ? `<div class="pin-list">${list}</div>` : ""}</section>`;
 }
 function funCard(){
   if(!S.config) return "";
@@ -2724,6 +2752,14 @@ document.addEventListener("click", e => {
       guarded(async () => { const ok = await write(() => S.db.doc("league/config").update({pin:{url, title, amount, at:Date.now(), by:getMe()}, updatedAt:Date.now()})); if(ok) toast("Link oben angepinnt"); }); break; }
     case "pin-del": if(!isAdmin()) break; guarded(async () => { const ok = await write(() => S.db.doc("league/config").update({pin:null, updatedAt:Date.now()})); if(ok) toast("Link entfernt"); }); break;
     case "pin-hide": try{ localStorage.setItem("padel-pin-done", String(S.config?.pin?.at||"")); }catch{} render(); toast("Ausgeblendet"); break;
+    case "pin-list": S.pinOpen = !S.pinOpen; render(); break;
+    case "pp-paid": case "pp-undo": case "pp-conf": {
+      const pin = S.config?.pin; const me = getMe(); if(!pin?.url || !me) break; const key = String(pin.at||0);
+      const who = a==="pp-conf" ? id : me; const ref = S.db.collection("pinpays").doc(key+"_"+who);
+      if(a==="pp-conf" && me !== (pin.by || ADMIN_PIDS[0])) break;
+      guarded(async () => { const ok = await write(() => a==="pp-paid" ? ref.set({pin:key, pid:me, status:"paid", t:Date.now()})
+          : a==="pp-undo" ? ref.delete() : ref.update({status:"confirmed", confirmedAt:Date.now(), confirmedBy:me}));
+        if(ok) toast(a==="pp-paid" ? `Gemeldet · ${pname(pin.by||ADMIN_PIDS[0])} bestätigt` : a==="pp-undo" ? "Zurückgenommen" : `${pname(id)} bestätigt`); }); break; }
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
@@ -2983,6 +3019,7 @@ function subscribe(){
     DB.collection("votes").onSnapshot(q => { S.votes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("surveys").onSnapshot(q => { S.surveys = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("svotes").onSnapshot(q => { S.svotes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
+    DB.collection("pinpays").onSnapshot(q => { S.pinpays = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("comments").onSnapshot(q => { S.comments = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("avatars").onSnapshot(q => { S.avatars = Object.fromEntries(q.docs.map(x => [x.id, x.data()])); render(); }, () => {}),
     DB.collection("doorcodes").onSnapshot(q => { S.doorcodes = Object.fromEntries(q.docs.map(x => [x.id, x.data()])); render(); }, () => {}),
