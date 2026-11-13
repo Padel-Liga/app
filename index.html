@@ -409,6 +409,7 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .tk-q{font-size:12px;color:var(--muted)}
 .cp{border-top:1px solid var(--line);margin:0 14px;padding:12px 0 16px;display:grid;gap:8px}
 .card>.cp{margin:0;padding:12px 0 0}
+.card.md>.cp{border-top:1px solid var(--line);padding:10px 0 0}
 .door{display:flex;align-items:center;gap:10px;margin:0 14px 12px;background:var(--surface-2);border-radius:12px;padding:10px 10px 10px 12px}
 .card>.door{margin:0}
 .door-top{padding:12px 14px;border:1.5px solid var(--ball)}
@@ -572,7 +573,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-13.2";
+const APP_VERSION = "2026-11-13.3";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1163,6 +1164,7 @@ function previewCard(){
     : `<div class="slots">${[0,1,2,3].map(i => P.play[i] ? `<div class="slot on">${avatar(P.play[i])}<span>${esc(pname(P.play[i]))}</span></div>` : `<div class="slot">offen</div>`).join("")}</div>
       <p class="note" style="margin:0">Noch ${4-P.play.length} ${4-P.play.length===1?"Zusage fehlt":"Zusagen fehlen"}. Sobald vier zugesagt haben, stehen hier die Paarungen.</p>
       <div><button class="btn sm" data-act="nav" data-view="home" id="btnToPoll">Zur Abstimmung</button></div>`}
+    ${P.play.length ? carpool(ns.key, P.play.slice(0,4)) : ""}
   </section>`;
 }
 
@@ -1689,6 +1691,7 @@ function viewMatchdays(){
         <div class="md-av">${parts.slice(0,6).map(id => avatar(id)).join("")}</div>
         <div class="pills">${winners.length?`<span class="pill ball">Tagessieg: ${winners.map(id=>esc(pname(id))).join(" & ")}</span>`:""}${stPill}${payPill}</div>
         <span class="md-chev">${ICON.chev}</span></div>
+      ${md.date && md.date >= today() && parts.length ? carpool(md.date, parts) : ""}
       ${open ? `${ms.length ? `<div class="rounds">${ms.map((m,i)=>matchLine(m,i,md)).join("")}</div>` : `<div class="muted small">Noch keine Matches eingetragen.</div>`}
       ${dayLine(md)}
       ${md.note?`<div class="muted small">${esc(md.note)}</div>`:""}` : ""}
