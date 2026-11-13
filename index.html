@@ -578,7 +578,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-13.5";
+const APP_VERSION = "2026-11-13.6";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1893,7 +1893,7 @@ function ledAction(e){
   const me = getMe();
   if(e.status==="pending" && e.from===me) return `<button class="btn sm ghost" style="color:var(--muted)" data-act="led-withdraw" data-id="${esc(e.id)}">Zurückziehen</button>`;
   if(e.status==="pending") return "";
-  if(isBankMe() && ledEditable(e)) return `<button class="btn sm ghost" style="color:var(--muted)" data-act="del-led" data-id="${esc(e.id)}" title="Löschbar bis ${esc(ledUntil(e))}">Löschen</button>`;
+  if((isBankMe() || (e.type==="cost" && e.by && e.by===getMe())) && ledEditable(e)) return `<button class="btn sm ghost" style="color:var(--muted)" data-act="del-led" data-id="${esc(e.id)}" title="Löschbar bis ${esc(ledUntil(e))}">Löschen</button>`;
   return ledEditable(e) ? "" : `<span class="small muted" title="Buchungen sind nach 24 Stunden gesperrt">🔒</span>`;
 }
 function modalDelLed(){
@@ -2831,7 +2831,7 @@ document.addEventListener("click", e => {
       break; }
     case "del-led": {
       const e = S.ledger.find(x=>x.id===id) || {};
-      if(!isBankMe()){ toast(`Buchungen kann nur ${bank()?pname(bank()):"der Kassenwart"} löschen.`); break; }
+      if(!isBankMe() && !(e.type==="cost" && e.by && e.by===getMe())){ toast(`Buchungen kann nur ${bank()?pname(bank()):"der Kassenwart"} löschen.`); break; }
       if(!ledEditable(e)){ toast("Buchungen lassen sich nur 24 Stunden lang löschen."); break; }
       openModal("delled", {id, reason:""}); break; }
     case "del-led-ok": {
