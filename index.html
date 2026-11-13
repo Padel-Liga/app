@@ -578,7 +578,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-13.4";
+const APP_VERSION = "2026-11-13.5";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1255,7 +1255,7 @@ function broadcastSection(){
     ${pin?.url ? `<div class="pin-cur"><div style="min-width:0"><b>${esc(pin.title||"Zahlung")}</b><div class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(pin.url)}</div></div><button class="btn sm danger" data-act="pin-del">Entfernen</button></div>` : ""}
     <div class="grid2" style="gap:8px"><input class="input keep" id="pin-title" placeholder="Titel, z. B. Bälle-Bestellung" maxlength="40" value="${esc(pin?.title||"")}"><input class="input keep" id="pin-amt" placeholder="Betrag (optional)" maxlength="12" value="${esc(pin?.amount||"")}"></div>
     <div class="row" style="margin-top:8px;flex-wrap:nowrap"><input class="input keep" id="pin-url" placeholder="PayPal-Link einfügen (https://…)" inputmode="url" autocomplete="off" value="${esc(pin?.url||"")}" style="flex:1;min-width:0"><button class="btn sm primary" data-act="pin-save">${pin?.url?"Ändern":"Anpinnen"}</button></div>
-    <p class="note" style="margin:6px 0 0">Der Link steht dann für alle ganz oben auf der Startseite. Jeder kann ihn nach dem Bezahlen für sich ausblenden.</p>`;
+    <p class="note" style="margin:6px 0 0">Der Link steht dann für alle ganz oben auf der Startseite, bis du ihn hier entfernst.</p>`;
   return accSection("bc","📣","Nachricht an alle", "Push an die Liga schicken", "", content + pinUi);
 }
 function modalBc(){
@@ -1577,11 +1577,8 @@ async function sendComment(target, fid){
 /* ---------- Angepinnter Zahlungslink (z. B. Bälle-Bestellung), gesetzt von Michael ---------- */
 function pinBanner(){
   const pin = S.config?.pin; if(!pin?.url || !/^https:\/\//.test(pin.url)) return "";
-  let hid = false; try{ hid = localStorage.getItem("padel-pin-done")===String(pin.at||""); }catch{}
-  if(hid) return "";
   return `<section class="pin-b"><span class="pin-i">💶</span><div class="pin-t"><b>${esc(pin.title||"Zahlung")}</b><span>${pin.amount ? esc(pin.amount)+" · " : ""}bitte per PayPal bezahlen</span></div>
-    <a class="btn sm primary" href="${esc(pin.url)}" target="_blank" rel="noopener">PayPal ›</a>
-    <button class="pin-x" data-act="pin-hide" aria-label="Erledigt, ausblenden" title="Erledigt – ausblenden">✓</button></section>`;
+    <a class="btn sm primary" href="${esc(pin.url)}" target="_blank" rel="noopener">PayPal ›</a></section>`;
 }
 function funCard(){
   if(!S.config) return "";
