@@ -511,6 +511,11 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .cm-t{font-size:14px;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
 .cm-f{display:flex;gap:8px}.cm-f .input{flex:1;min-height:38px;font-size:16px}
 .cm-more{border:0;background:none;color:var(--primary);font:600 12.5px var(--font);text-align:left;padding:0;cursor:pointer}
+.poll-mini{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer}
+.pm-l{flex:1;min-width:0;display:grid;gap:6px}.pm-t{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pm-r{display:flex;align-items:center;gap:10px}.pm-av{display:flex}.pm-av .avatar{width:26px;height:26px;font-size:10px;border:2px solid var(--surface);margin-left:-7px}.pm-av .avatar:first-child{margin-left:0}
+.pm-me{font-size:12.5px;color:var(--muted);font-weight:600}
+.poll-close{justify-self:end;border:0;background:none;color:var(--muted);font:600 12.5px var(--font);display:flex;align-items:center;gap:4px;cursor:pointer;margin:-6px -4px -8px 0;padding:2px 4px}.poll-close svg{width:14px;height:14px;transform:rotate(-90deg)}
 .live-r{display:grid;gap:10px;border:1.5px solid var(--primary) !important}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
@@ -564,7 +569,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-12.19";
+const APP_VERSION = "2026-11-13.1";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -840,7 +845,9 @@ function render(){
       html += doorBig() + liveRoundsCard();
       const c = funCard();
       // Am Spieltag steht die Matchday-Karte oben, danach ist die Abstimmung für den nächsten Termin das Wichtigste: ganz oben angepinnt
-      html += c ? doorTop() + surveyBanners() + recapHome() + c : pollCard() + doorTop() + surveyBanners() + recapHome();
+      const ns = nextSession(); const full = ns && pollFor(ns.key).play.length >= 4;
+      // offene Abstimmung ganz oben angepinnt; steht das Spiel, rutscht sie kompakt nach unten (in viewHome)
+      html += c ? doorTop() + surveyBanners() + recapHome() + c : (full ? "" : pollCard()) + doorTop() + surveyBanners() + recapHome();
     }
     if(S.view==="home" || S.view==="spieltage") html += missingCard();
     html += ({home:viewHome, tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
@@ -971,7 +978,14 @@ function pollCard(){
   const status = full ? `<span class="pill good">Spiel steht ✓</span>` : `<span class="pill ${P.play.length?"info":"neutral"}">${P.play.length}/4 dabei</span>`;
   const one = id => isGuest(id) ? `${esc(pname(id))}<span class="gtag">Gast</span>${canWrite()?`<button class="btn ghost sm" style="min-height:24px;padding:0 6px;color:var(--muted)" data-act="unvote" data-id="${esc(id)}" aria-label="${esc(pname(id))} entfernen">✕</button>`:""}` : esc(pname(id));
   const names = ids => ids.length ? ids.map(one).join(", ") : `<span class="muted">–</span>`;
-  return `<section class="card" style="display:grid;gap:14px">
+  if(full && !S.pollOpen){   // Spiel steht: kompakt, zum Aufklappen
+    const my = !me ? "" : P.play.includes(me) ? "Du bist dabei" : P.wait.includes(me) ? "Du bist auf der Warteliste" : mine==="maybe" ? "Du: vielleicht" : mine==="no" ? "Du: kann nicht" : "Du hast noch nicht abgestimmt";
+    return `<section class="card poll-mini" data-act="poll-open" role="button" tabindex="0" aria-expanded="false">
+      <div class="pm-l"><div class="pm-t">Abstimmung · ${esc(fmtSession(ns))} <span class="pill good">Spiel steht ✓</span></div>
+        <div class="pm-r"><span class="pm-av">${P.play.map(id => avatar(id)).join("")}</span><span class="pm-me">${my}</span></div></div>
+      <span class="md-chev">${ICON.chev}</span></section>`;
+  }
+  return `<section class="card" style="display:grid;gap:14px">${full ? `<button class="poll-close" data-act="poll-open">Einklappen ${ICON.chev}</button>` : ""}
     <div class="card-head" style="margin:0"><div><h2><span style="white-space:nowrap">Abstimmung ·</span> <span style="white-space:nowrap">${fmtSession(ns)} <button class="info-i" data-act="poll-info" aria-label="So funktioniert die Abstimmung" aria-pressed="${!!S.pollInfo}">i</button></span></h2><div class="small muted">${sched().start}–${sched().end} Uhr${ns.live?" · Spiel läuft gerade":" · Spiel "+countdownText(ns)}</div></div>${status}</div>
     ${me ? `<div class="small muted">Du stimmst als <b style="color:var(--ink)">${nameHtml(me)}</b> ab.</div>` : claimBox()}
     <div class="vote">
@@ -1253,7 +1267,8 @@ function viewHome(){
           <div style="min-width:0"><div class="pname">${esc(pname(x.id))}${x.id===me?` <span class="pill info" style="vertical-align:1px">du</span>`:""}</div><div class="meta">${x.s}:${x.n} Siege · ${formHtml(x.form)}</div></div></div>
         <span class="amt-v" style="font-size:16px">${x.sp?pct(x.quote):"–"}</span></div>`).join("")}</div></section>`
     : `<section class="card"><h2>Tabelle</h2><div class="muted small">Noch keine Ergebnisse.</div></section>`;
-  return broadcastCards() + (funCard() ? pollCard() : "") + mini;
+  const full = (() => { const ns = nextSession(); return ns && pollFor(ns.key).play.length >= 4; })();
+  return broadcastCards() + (funCard() || full ? pollCard() : "") + mini;
 }
 /* ---------- Spieltag-Karte (Ticket mit Statistik-Kacheln) ---------- */
 function funTiles(key, play){
@@ -2659,6 +2674,7 @@ document.addEventListener("click", e => {
       if(S.armed!=="sv:"+id){ S.armed = "sv:"+id; render(); break; }
       S.armed = null;
       guarded(async () => { const ok = await write(() => S.db.collection("surveys").doc(id).delete()); if(ok) toast("Umfrage gelöscht"); }); break; }
+    case "poll-open": S.pollOpen = !S.pollOpen; render(); break;
     case "poll-info": S.pollInfo = !S.pollInfo; render(); break;
     case "pp-open": if(getMe()) openModal("ppic", {}); break;
     case "pp-remove": S.draft.img = null; renderModal(); break;
