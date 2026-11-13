@@ -519,6 +519,11 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .poll-close{justify-self:end;border:0;background:none;color:var(--muted);font:600 12.5px var(--font);display:flex;align-items:center;gap:4px;cursor:pointer;margin:-6px -4px -8px 0;padding:2px 4px}.poll-close svg{width:14px;height:14px;transform:rotate(-90deg)}
 .hdr-poll{display:flex;align-items:center;gap:6px;border:0;background:none;padding:2px 0 0;margin:0;font:600 12px var(--font);color:var(--muted);cursor:pointer;white-space:nowrap;max-width:100%;overflow:hidden}
 .hdr-poll[hidden]{display:none}.hp-ok{color:var(--good);font-weight:700}.hp-d{color:var(--ink-2)}.hp-l{color:var(--primary)}
+.pin-b{display:flex;align-items:center;gap:10px;background:var(--surface);border:1.5px solid #0070BA;border-radius:14px;padding:10px 10px 10px 12px;margin-bottom:12px}
+.pin-i{font-size:22px}.pin-t{flex:1;min-width:0;display:grid}.pin-t b{font-size:14.5px}.pin-t span{font-size:12.5px;color:var(--muted)}
+.pin-b .btn.primary{background:#0070BA !important;border-color:#0070BA !important;color:#fff !important;text-decoration:none}
+.pin-x{border:1px solid var(--line);background:var(--surface-2);border-radius:50%;width:30px;height:30px;color:var(--muted);font-weight:800;cursor:pointer;flex:none}
+.pin-cur{display:flex;align-items:center;gap:10px;justify-content:space-between;background:var(--surface-2);border-radius:10px;padding:8px 10px;margin-bottom:8px}
 .live-r{display:grid;gap:10px;border:1.5px solid var(--primary) !important}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
@@ -573,7 +578,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-13.3";
+const APP_VERSION = "2026-11-13.4";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -848,7 +853,7 @@ function render(){
   } else if(cfg){
 
     if(S.view==="home"){
-      html += doorBig() + liveRoundsCard();
+      html += doorBig() + liveRoundsCard() + pinBanner();
       const c = funCard();
       // Am Spieltag steht die Matchday-Karte oben, danach ist die Abstimmung für den nächsten Termin das Wichtigste: ganz oben angepinnt
       const ns = nextSession(); const full = ns && pollFor(ns.key).play.length >= 4;
@@ -1245,7 +1250,13 @@ function broadcastSection(){
     ${hist.length ? `<div class="lbl" style="margin:14px 0 2px">${planned.length ? "Geplant & zuletzt gesendet" : "Zuletzt gesendet"}</div><div class="list">${hist.map(b => `<div class="li"><div style="min-width:0"><div class="pname">${esc(b.title || b.body.slice(0,40))}</div>
       <div class="meta">${esc(when(b.at))} · an ${b.to==="all" ? "alle" : b.to==="players" ? "Liga-Spieler" : (b.to||[]).length + " Personen"}</div></div>
       <div class="amt"><span class="pill ${b.status==="sent"?"good":bcPlanned(b)?"info":"neutral"}">${b.status==="sent" ? `gesendet${b.count!=null?" · "+b.count:""}` : bcPlanned(b) ? "⏰ geplant" : "wird gesendet …"}</span>${bcDelBtn(b).replace("margin-left:-11px","")}</div></div>`).join("")}</div>` : ""}`;
-  return accSection("bc","📣","Nachricht an alle", "Push an die Liga schicken", "", content);
+  const pin = S.config?.pin;
+  const pinUi = `<div class="lbl" style="margin:16px 0 6px">📌 Zahlungslink oben anpinnen</div>
+    ${pin?.url ? `<div class="pin-cur"><div style="min-width:0"><b>${esc(pin.title||"Zahlung")}</b><div class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(pin.url)}</div></div><button class="btn sm danger" data-act="pin-del">Entfernen</button></div>` : ""}
+    <div class="grid2" style="gap:8px"><input class="input keep" id="pin-title" placeholder="Titel, z. B. Bälle-Bestellung" maxlength="40" value="${esc(pin?.title||"")}"><input class="input keep" id="pin-amt" placeholder="Betrag (optional)" maxlength="12" value="${esc(pin?.amount||"")}"></div>
+    <div class="row" style="margin-top:8px;flex-wrap:nowrap"><input class="input keep" id="pin-url" placeholder="PayPal-Link einfügen (https://…)" inputmode="url" autocomplete="off" value="${esc(pin?.url||"")}" style="flex:1;min-width:0"><button class="btn sm primary" data-act="pin-save">${pin?.url?"Ändern":"Anpinnen"}</button></div>
+    <p class="note" style="margin:6px 0 0">Der Link steht dann für alle ganz oben auf der Startseite. Jeder kann ihn nach dem Bezahlen für sich ausblenden.</p>`;
+  return accSection("bc","📣","Nachricht an alle", "Push an die Liga schicken", "", content + pinUi);
 }
 function modalBc(){
   const d = S.draft; const ids = [...players(), ...guests()].map(p=>p.id);
@@ -1562,6 +1573,15 @@ async function sendComment(target, fid){
   inp.value = "";
   const ok = await write(() => S.db.collection("comments").doc(uid()).set({t:target, pid:me, text, at:Date.now()}));
   if(!ok && inp) inp.value = text;
+}
+/* ---------- Angepinnter Zahlungslink (z. B. Bälle-Bestellung), gesetzt von Michael ---------- */
+function pinBanner(){
+  const pin = S.config?.pin; if(!pin?.url || !/^https:\/\//.test(pin.url)) return "";
+  let hid = false; try{ hid = localStorage.getItem("padel-pin-done")===String(pin.at||""); }catch{}
+  if(hid) return "";
+  return `<section class="pin-b"><span class="pin-i">💶</span><div class="pin-t"><b>${esc(pin.title||"Zahlung")}</b><span>${pin.amount ? esc(pin.amount)+" · " : ""}bitte per PayPal bezahlen</span></div>
+    <a class="btn sm primary" href="${esc(pin.url)}" target="_blank" rel="noopener">PayPal ›</a>
+    <button class="pin-x" data-act="pin-hide" aria-label="Erledigt, ausblenden" title="Erledigt – ausblenden">✓</button></section>`;
 }
 function funCard(){
   if(!S.config) return "";
@@ -2700,6 +2720,13 @@ document.addEventListener("click", e => {
       const c = S.comments.find(x => x.id===id); const me = getMe(); if(!c || !(c.pid===me || isAdmin())) break;
       if(S.armed!=="cm:"+id){ S.armed = "cm:"+id; toast("Nochmal tippen zum Löschen"); break; }
       S.armed = null; guarded(async () => { await write(() => S.db.collection("comments").doc(id).delete()); }); break; }
+    case "pin-save": {
+      if(!isAdmin()) break;
+      const url = ($("pin-url")?.value||"").trim(), title = ($("pin-title")?.value||"").trim() || "Zahlung", amount = ($("pin-amt")?.value||"").trim();
+      if(!/^https:\/\/\S+$/.test(url)){ toast("Bitte einen gültigen Link mit https:// einfügen."); break; }
+      guarded(async () => { const ok = await write(() => S.db.doc("league/config").update({pin:{url, title, amount, at:Date.now(), by:getMe()}, updatedAt:Date.now()})); if(ok) toast("Link oben angepinnt"); }); break; }
+    case "pin-del": if(!isAdmin()) break; guarded(async () => { const ok = await write(() => S.db.doc("league/config").update({pin:null, updatedAt:Date.now()})); if(ok) toast("Link entfernt"); }); break;
+    case "pin-hide": try{ localStorage.setItem("padel-pin-done", String(S.config?.pin?.at||"")); }catch{} render(); toast("Ausgeblendet"); break;
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
