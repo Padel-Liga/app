@@ -819,6 +819,8 @@ body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
   url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 200' preserveAspectRatio='none'%3E%3Cg fill='none' stroke='%23ffffff' stroke-width='0.9' vector-effect='non-scaling-stroke'%3E%3Crect x='6' y='4' width='88' height='192' stroke-width='1.6' vector-effect='non-scaling-stroke'/%3E%3Cline x1='6' y1='100' x2='94' y2='100' stroke-width='2.4' vector-effect='non-scaling-stroke'/%3E%3Cline x1='6' y1='52' x2='94' y2='52'/%3E%3Cline x1='6' y1='148' x2='94' y2='148'/%3E%3Cline x1='50' y1='52' x2='50' y2='148'/%3E%3C/g%3E%3C/svg%3E") center/100% 100% no-repeat,
   radial-gradient(120% 80% at 50% 0%,#EEF3FC 0%,#E6EDF9 60%,#DFE8F7 100%)}
 .appbar{background:rgba(255,255,255,.92) !important}
+body{background:#F2F5FB !important}
+body::before{opacity:.35}
 main,#view{background:transparent !important}
 .v2-sec>span:first-child{color:var(--court-dk) !important}
 
@@ -873,7 +875,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-13.11";
+const APP_VERSION = "2026-11-13.12";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
