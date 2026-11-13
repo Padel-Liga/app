@@ -516,6 +516,8 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .pm-r{display:flex;align-items:center;gap:10px}.pm-av{display:flex}.pm-av .avatar{width:26px;height:26px;font-size:10px;border:2px solid var(--surface);margin-left:-7px}.pm-av .avatar:first-child{margin-left:0}
 .pm-me{font-size:12.5px;color:var(--muted);font-weight:600}
 .poll-close{justify-self:end;border:0;background:none;color:var(--muted);font:600 12.5px var(--font);display:flex;align-items:center;gap:4px;cursor:pointer;margin:-6px -4px -8px 0;padding:2px 4px}.poll-close svg{width:14px;height:14px;transform:rotate(-90deg)}
+.hdr-poll{display:flex;align-items:center;gap:6px;border:0;background:none;padding:2px 0 0;margin:0;font:600 12px var(--font);color:var(--muted);cursor:pointer;white-space:nowrap;max-width:100%;overflow:hidden}
+.hdr-poll[hidden]{display:none}.hp-ok{color:var(--good);font-weight:700}.hp-d{color:var(--ink-2)}.hp-l{color:var(--primary)}
 .live-r{display:grid;gap:10px;border:1.5px solid var(--primary) !important}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 .cp-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:9px 10px 9px 12px}
@@ -530,6 +532,7 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
       <div class="logo" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#d9f24b"/><path d="M5.2 5.2a10 10 0 0 1 0 13.6M18.8 5.2a10 10 0 0 0 0 13.6" fill="none" stroke="#fff" stroke-width="1.8"/></svg></div>
       <div style="min-width:0">
         <h1 id="leagueName">Padel-Masters</h1>
+        <button class="hdr-poll" id="hdrPoll" data-act="hdr-poll" hidden></button>
         <div class="sub" id="leagueSub">Wird geladen …</div>
       </div>
     </div>
@@ -569,7 +572,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-13.1";
+const APP_VERSION = "2026-11-13.2";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -796,6 +799,8 @@ function render(){
   tickCountdown();
   const cfg = S.config;
   $("leagueName").textContent = cfg?.name || "Padel-Masters";
+  { const hp = $("hdrPoll"); const ns = cfg && players().length ? nextSession() : null; const full = ns && pollFor(ns.key).play.length >= 4;
+    hp.hidden = !full; if(full) hp.innerHTML = `<span class="hp-ok">✓ Spiel steht</span><span class="hp-d">${esc(fmtSession(ns))}</span><span class="hp-l">Abstimmung ›</span>`; }
   const nMd = S.matchdays.length, nP = players().length;
   $("leagueSub").textContent = !allLoaded() ? "Wird geladen …" : cfg ? `${nP} Spieler · ${nMd} ${nMd===1?"Spieltag":"Spieltage"}${cfg.season ? " · "+cfg.season : ""}` : "Noch nicht eingerichtet";
   VIEWS.forEach(v => { const t = $("tab-"+v); if(v===S.view) t.setAttribute("aria-current","page"); else t.removeAttribute("aria-current"); });
@@ -2674,6 +2679,8 @@ document.addEventListener("click", e => {
       if(S.armed!=="sv:"+id){ S.armed = "sv:"+id; render(); break; }
       S.armed = null;
       guarded(async () => { const ok = await write(() => S.db.collection("surveys").doc(id).delete()); if(ok) toast("Umfrage gelöscht"); }); break; }
+    case "hdr-poll": S.view = "home"; S.pollOpen = true; history.replaceState(null,"","#home"); render();
+      setTimeout(() => { const c = document.querySelector(".poll-close")?.closest(".card"); c?.scrollIntoView({behavior:"smooth", block:"start"}); }, 60); break;
     case "poll-open": S.pollOpen = !S.pollOpen; render(); break;
     case "poll-info": S.pollInfo = !S.pollInfo; render(); break;
     case "pp-open": if(getMe()) openModal("ppic", {}); break;
