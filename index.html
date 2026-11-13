@@ -531,6 +531,7 @@ h1,h2,h3,.md-no,.acc-t{font-style:normal;text-transform:none;font-weight:700;let
 .pin-s{font-size:12.5px;font-weight:700}.pin-s.ok{color:var(--good)}.pin-s.wait{color:#8A5A00}.pin-s.no{color:var(--muted);font-weight:600}
 .pin-list{display:grid;border-top:1px solid var(--line)}
 .pin-li{display:flex;align-items:center;gap:10px;padding:7px 0}.pin-li+.pin-li{border-top:1px dashed var(--line)}
+.pin-li .pin-s.no+.btn{margin-left:8px}
 .pin-li .avatar{width:28px;height:28px;font-size:11px}.pin-n{flex:1;font-weight:600;font-size:14px}
 .live-r{display:grid;gap:10px;border:1.5px solid var(--primary) !important}
 .cp-h{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
@@ -586,7 +587,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-13.7";
+const APP_VERSION = "2026-11-13.8";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1601,12 +1602,24 @@ function pinBanner(){
   const list = payers.map(id => { const x = st(id);
     const right = x==="confirmed" ? `<span class="pin-s ok">bestätigt</span>`
       : x==="paid" ? (me===owner && canWrite() ? `<button class="btn sm primary" data-act="pp-conf" data-id="${esc(id)}">Bestätigen</button>` : id===me && canWrite() ? `<button class="btn sm ghost" data-act="pp-undo">Zurücknehmen</button>` : `<span class="pin-s wait">gemeldet</span>`)
-      : `<span class="pin-s no">offen</span>`;
+      : me===owner && canWrite() ? `<span class="pin-s no">offen</span><button class="btn sm" data-act="pp-conf" data-id="${esc(id)}">Bestätigen</button>` : `<span class="pin-s no">offen</span>`;
     return `<div class="pin-li">${avatar(id)}<span class="pin-n">${esc(pname(id))}</span>${right}</div>`; }).join("");
   return `<section class="pin-b"><div class="pin-top"><span class="pin-i">💶</span><div class="pin-t"><b>${esc(pin.title||"Zahlung")}</b><span>${pin.amount ? esc(pin.amount)+" · " : ""}bitte per PayPal an ${esc(pname(owner))}</span></div>
     <a class="btn sm primary" href="${esc(pin.url)}" target="_blank" rel="noopener">PayPal ›</a></div>
     <div class="pin-mid">${myRow}<button class="pin-prog" data-act="pin-list">${confN===payers.length ? "✓ alle bezahlt" : `${paidN} von ${payers.length} bezahlt`}${confN<paidN ? ` · ${paidN-confN} unbestätigt` : ""} <span class="md-chev" style="${open?"transform:rotate(90deg)":""}">${ICON.chev}</span></button></div>
     ${open ? `<div class="pin-list">${list}</div>` : ""}</section>`;
+}
+/* ---------- Separate Kosten: nur Anzeige, nicht mit Guthaben verrechnet ---------- */
+function sepCostsCard(){
+  const L = S.ledger.filter(e => e.type==="sep").sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.createdAt||0)-(a.createdAt||0));
+  if(!L.length) return "";
+  const live = L.filter(e => e.status!=="deleted"); const sum = live.reduce((t,e)=>t+num(e.amount),0);
+  return `<section class="card" style="padding:14px 16px"><div class="card-head" style="margin-bottom:6px"><h2 style="font-size:16px">Separate Kosten</h2><span class="small muted">${eur.format(sum)} gesamt</span></div>
+    <div class="list">${L.map(e => { const del = e.status==="deleted";
+      return `<div class="li" style="padding:7px 0;${del?"opacity:.55":""}"><div style="min-width:0"><div class="small"><b>${esc(e.title||"Kosten")}</b> <span class="muted">· ${esc(fmtDate(e.date))}${e.by?` · von ${esc(pname(e.by))}`:""}</span></div>
+        ${e.note ? `<div class="meta">${esc(e.note)}</div>` : ""}${del ? `<div class="meta">gelöscht: „${esc(e.deleteReason||"")}“</div>` : ""}</div>
+        <div class="amt"><span class="amt-v" style="${del?"text-decoration:line-through":""}">${eur.format(num(e.amount))}</span>${ledAction(e)}</div></div>`; }).join("")}</div>
+    <p class="note" style="margin:6px 0 0">Diese Kosten werden nicht mit den Konten verrechnet, sie stehen hier nur zur Übersicht.</p></section>`;
 }
 function funCard(){
   if(!S.config) return "";
@@ -1921,7 +1934,7 @@ function ledAction(e){
   const me = getMe();
   if(e.status==="pending" && e.from===me) return `<button class="btn sm ghost" style="color:var(--muted)" data-act="led-withdraw" data-id="${esc(e.id)}">Zurückziehen</button>`;
   if(e.status==="pending") return "";
-  if((isBankMe() || (e.type==="cost" && e.by && e.by===getMe())) && ledEditable(e)) return `<button class="btn sm ghost" style="color:var(--muted)" data-act="del-led" data-id="${esc(e.id)}" title="Löschbar bis ${esc(ledUntil(e))}">Löschen</button>`;
+  if((isBankMe() || ((e.type==="cost" || e.type==="sep") && e.by && e.by===getMe())) && ledEditable(e)) return `<button class="btn sm ghost" style="color:var(--muted)" data-act="del-led" data-id="${esc(e.id)}" title="Löschbar bis ${esc(ledUntil(e))}">Löschen</button>`;
   return ledEditable(e) ? "" : `<span class="small muted" title="Buchungen sind nach 24 Stunden gesperrt">🔒</span>`;
 }
 function modalDelLed(){
@@ -2005,7 +2018,7 @@ function viewCash(){
 
   // Buchungen: Filter, die letzten 5, nach Monat gruppiert
   const flt = S.ledFilter || "all";
-  const ledAll = [...S.ledger].filter(e => flt==="all" || (flt==="payment" ? e.type!=="cost" : e.type===flt)).sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.createdAt||0)-(a.createdAt||0));
+  const ledAll = [...S.ledger].filter(e => e.type!=="sep").filter(e => flt==="all" || (flt==="payment" ? e.type!=="cost" : e.type===flt)).sort((a,b) => (b.date||"").localeCompare(a.date||"") || (b.createdAt||0)-(a.createdAt||0));
   const led = S.ledAll ? ledAll : ledAll.slice(0,5);
   let lastMonth = "";
   const ledHtml = led.map(e => {
@@ -2041,6 +2054,7 @@ function viewCash(){
   ${F.outside.length ? `<section class="card" style="padding:14px 16px"><div class="card-head" style="margin-bottom:6px"><h2 style="font-size:16px">Außerhalb des Abos</h2><span class="small muted">${eur.format(F.outside.reduce((s,o)=>s+o.cost,0))} gesamt</span></div>
     <div class="list">${F.outside.slice().reverse().map(o => `<div class="li" style="padding:7px 0"><div class="small"><b>${esc(fmtDate(o.md.date))}</b> <span class="muted">· ${o.paidBy==="self" ? "jeder selbst vor Ort" : "bezahlt von " + esc(pname(o.paidBy))} · je ${eur.format(o.share)}</span></div><span class="small num" style="font-weight:600">${eur.format(o.cost)}</span></div>`).join("")}</div>
     <p class="note" style="margin:6px 0 0">Zählen zu den Gesamtkosten, nicht zu ${bank()?esc(pname(bank()))+"s":"dem"} Vorschuss. Hat ein Spieler bezahlt, bekommt er den Betrag gutgeschrieben und die Anteile werden mit den Konten verrechnet.</p></section>` : ""}
+  ${sepCostsCard()}
   <section class="card"><div class="card-head"><h2>Buchungen</h2><span class="small muted">${ledAll.length}</span></div>
     <div class="chips" style="margin-bottom:4px">${fchip("all","Alle")}${fchip("payment","Zahlungen")}${fchip("cost","Kosten")}</div>
     ${ledHtml ? `<div class="list">${ledHtml}</div>` : `<div class="muted small" style="padding-top:8px">Keine Einträge.</div>`}
@@ -2443,15 +2457,20 @@ function modalPay(){
     <div class="field"><label for="p-note">Notiz</label><input class="input" id="p-note" data-f="note" value="${esc(d.note)}" placeholder="z. B. bar, PayPal"></div>`,
     foot:`<span></span><button class="btn primary" data-act="pay-save" id="btnSavePay">Zahlung speichern</button>` };
 }
+function costSplit(d, share){ return `<div class="field"><span class="lbl">Aufteilen auf${share?` · je ${eur.format(share)}`:""}</span><div class="chips">${players().map(p => `<button class="chip" data-act="cost-player" data-id="${esc(p.id)}" aria-pressed="${d.players.includes(p.id)}">${esc(p.name)}</button>`).join("")}</div></div>`; }
 function modalCost(){
   const d = S.draft; const share = d.players.length ? num(d.amount)/d.players.length : 0;
   return { title:"Sonstige Kosten", html:`
+    <div class="field"><span class="lbl">Art</span><div class="chips">
+      <button class="chip" data-act="cost-kind" data-k="kasse" aria-pressed="${!d.sep}">Mit Guthaben verrechnen</button>
+      <button class="chip" data-act="cost-kind" data-k="sep" aria-pressed="${!!d.sep}">Separat (nur anzeigen)</button></div>
+      ${d.sep ? `<p class="note" style="margin:6px 0 0">Wird nicht mit den Konten verrechnet, sondern nur unter „Separate Kosten“ in der Kasse angezeigt, z. B. wenn jeder per PayPal direkt bezahlt.</p>` : ""}</div>
     <div class="field"><label for="c-title">Wofür?</label><input class="input" id="c-title" data-f="title" value="${esc(d.title)}" placeholder="z. B. Neue Bälle"></div>
     <div class="grid2">
       <div class="field"><label for="c-amt">Betrag (€)</label><input class="input" inputmode="decimal" id="c-amt" data-f="amount" data-rerender="1" value="${esc(d.amount)}"></div>
       <div class="field"><label for="c-date">Datum</label><input class="input" type="date" id="c-date" data-f="date" value="${esc(d.date)}"></div>
     </div>
-    <div class="field"><span class="lbl">Aufteilen auf${share?` · je ${eur.format(share)}`:""}</span><div class="chips">${players().map(p => `<button class="chip" data-act="cost-player" data-id="${esc(p.id)}" aria-pressed="${d.players.includes(p.id)}">${esc(p.name)}</button>`).join("")}</div></div>`,
+    ${d.sep ? `<div class="field"><label for="c-note">Hinweis (optional)</label><input class="input" id="c-note" data-f="note" value="${esc(d.note||"")}" placeholder="z. B. jeder zahlt per PayPal an Michael"></div>` : costSplit(d, share)}`,
     foot:`<span></span><button class="btn primary" data-act="cost-save" id="btnSaveCost">Kosten speichern</button>` };
 }
 
@@ -2585,6 +2604,10 @@ async function saveTransfer(){
 async function saveCost(){
   const d = S.draft; const amt = r2(num(d.amount));
   if(!(amt>0)){ toast("Bitte einen Betrag über 0 € eingeben."); return; }
+  if(d.sep){
+    const ok = await write(() => S.db.collection("ledger").doc(d.id).set({type:"sep", title:(d.title||"").trim()||"Kosten", amount:amt, date:d.date||today(), note:(d.note||"").trim(), createdAt:Date.now(), by:getMe()||null}));
+    if(ok){ closeModal(); toast("Separate Kosten gespeichert"); } return;
+  }
   if(!d.players.length){ toast("Bitte mindestens einen Spieler wählen."); return; }
   const ok = await write(() => S.db.collection("ledger").doc(d.id).set({type:"cost", title:(d.title||"").trim()||"Kosten", amount:amt, date:d.date||today(), players:[...d.players], createdAt:Date.now(), by:getMe()||null}));
   if(ok){ closeModal(); toast("Kosten gespeichert"); }
@@ -2758,7 +2781,7 @@ document.addEventListener("click", e => {
       const who = a==="pp-conf" ? id : me; const ref = S.db.collection("pinpays").doc(key+"_"+who);
       if(a==="pp-conf" && me !== (pin.by || ADMIN_PIDS[0])) break;
       guarded(async () => { const ok = await write(() => a==="pp-paid" ? ref.set({pin:key, pid:me, status:"paid", t:Date.now()})
-          : a==="pp-undo" ? ref.delete() : ref.update({status:"confirmed", confirmedAt:Date.now(), confirmedBy:me}));
+          : a==="pp-undo" ? ref.delete() : ref.set({pin:key, pid:id, status:"confirmed", t:S.pinpays.find(x => x.pin===key && x.pid===id)?.t || Date.now(), confirmedAt:Date.now(), confirmedBy:me}));
         if(ok) toast(a==="pp-paid" ? `Gemeldet · ${pname(pin.by||ADMIN_PIDS[0])} bestätigt` : a==="pp-undo" ? "Zurückgenommen" : `${pname(id)} bestätigt`); }); break; }
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
@@ -2835,6 +2858,7 @@ document.addEventListener("click", e => {
     case "new-cost": openModal("cost", {id:uid(), title:"", amount:"", date:today(), players:players().map(p=>p.id)}); break;
     case "cost-player": { const i = d.players.indexOf(id); if(i>=0) d.players.splice(i,1); else d.players.push(id); renderModal(); break; }
     case "cost-save": guarded(saveCost); break;
+    case "cost-kind": d.sep = el.dataset.k==="sep"; renderModal(); break;
     case "new-transfer": openModal("tr", {id:uid(), from:"", to:"", amount:"", date:today(), note:""}); break;
     case "tr-save": guarded(saveTransfer); break;
     case "pp": openModal("pp", {id, amount:String(r2(num(el.dataset.amt))).replace(".",",")}); break;
@@ -2867,7 +2891,7 @@ document.addEventListener("click", e => {
       break; }
     case "del-led": {
       const e = S.ledger.find(x=>x.id===id) || {};
-      if(!isBankMe() && !(e.type==="cost" && e.by && e.by===getMe())){ toast(`Buchungen kann nur ${bank()?pname(bank()):"der Kassenwart"} löschen.`); break; }
+      if(!isBankMe() && !((e.type==="cost" || e.type==="sep") && e.by && e.by===getMe())){ toast(`Buchungen kann nur ${bank()?pname(bank()):"der Kassenwart"} löschen.`); break; }
       if(!ledEditable(e)){ toast("Buchungen lassen sich nur 24 Stunden lang löschen."); break; }
       openModal("delled", {id, reason:""}); break; }
     case "del-led-ok": {
