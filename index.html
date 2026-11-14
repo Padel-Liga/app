@@ -3,7 +3,7 @@
 <head>
 <meta name="color-scheme" content="light only">
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Padel-Masters</title>
 <meta name="theme-color" content="#FFFFFF">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -826,6 +826,20 @@ main,#view{background:transparent !important}
 
 .pi{width:1.05em;height:1.05em;vertical-align:-.15em;flex:none}
 
+/* ===== Kein Zoomen, trotzdem überall sauber ===== */
+html{touch-action:manipulation;-webkit-text-size-adjust:100%;text-size-adjust:100%;overscroll-behavior-y:none}
+body{overflow-x:hidden}
+input,select,textarea,.input{font-size:16px !important}   /* iOS zoomt sonst beim Antippen eines Felds */
+*{-webkit-tap-highlight-color:transparent}
+img,svg{max-width:100%}
+@media (max-width:359px){
+  .v2-stats b{font-size:15px !important}.v2-stats span{font-size:10px}
+  .v2-tabs button{font-size:11px !important;letter-spacing:.06em !important}
+  .tab span{font-size:10px}.brand h1{font-size:16px !important}.cd{padding:6px 9px !important}.cd .cd-v{font-size:12.5px !important}
+  .ticket .tk-big{font-size:26px !important}.v2-ab b{font-size:30px !important}
+  .v2-aa{grid-template-columns:1fr !important}
+}
+
 </style>
 </head>
 <body>
@@ -875,7 +889,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-13.12";
+const APP_VERSION = "2026-11-14.1";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1981,6 +1995,11 @@ return function clean(root){
     const sp=document.createElement("span"); sp.innerHTML=html; n.replaceWith(...sp.childNodes); }
 }
 })();
+/* Zoom-Gesten verhindern (iOS ignoriert user-scalable teilweise) */
+["gesturestart","gesturechange","gestureend"].forEach(t => document.addEventListener(t, e => e.preventDefault(), {passive:false}));
+document.addEventListener("touchmove", e => { if(e.touches && e.touches.length > 1) e.preventDefault(); }, {passive:false});
+let _lastTouch = 0;
+document.addEventListener("touchend", e => { const n = Date.now(); if(n - _lastTouch < 300 && !e.target.closest("input,textarea,select")) e.preventDefault(); _lastTouch = n; }, {passive:false});
 function funCard(){
   if(!S.config) return "";
   const ns = nextSession(); if(!ns || ns.key !== today()) return "";
