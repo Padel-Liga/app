@@ -851,6 +851,22 @@ img,svg{max-width:100%}
 .c1-p span,.pin-n,.v2-bn,.h-trw b{white-space:normal !important;overflow-wrap:anywhere}
 .hdr-poll{white-space:normal !important;flex-wrap:wrap;row-gap:0}
 
+/* ===== Schmale iPhones (auch „Anzeigezoom“) – nichts abschneiden ===== */
+.acc-s,.h-tm>span:not(.h-mav){white-space:normal !important;overflow:visible !important;text-overflow:clip !important}
+.input,input,select,textarea{min-width:0;max-width:100%;box-sizing:border-box}
+.grid2>*,.row>*,.field>*{min-width:0}
+input[type=date],input[type=time]{width:100%;-webkit-appearance:none;appearance:none}
+.pill{white-space:normal !important;text-align:left}
+.sheet,.sheet-body{max-width:100vw;overflow-x:hidden}
+@media (max-width:379px){
+  .grid2{grid-template-columns:1fr !important}
+  .chips{gap:6px}.chip{padding:6px 10px;font-size:13px}
+  .v2-stats{grid-template-columns:repeat(2,1fr) !important;row-gap:10px}.v2-stats div:nth-child(3){border-left:0}
+  .h-facts{grid-template-columns:1fr 1fr}
+  .tab span{font-size:10px;letter-spacing:0}
+  .acc-head{gap:10px}
+}
+
 </style>
 </head>
 <body>
@@ -900,7 +916,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-14.2";
+const APP_VERSION = "2026-11-14.3";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
