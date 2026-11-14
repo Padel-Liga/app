@@ -840,6 +840,17 @@ img,svg{max-width:100%}
   .v2-aa{grid-template-columns:1fr !important}
 }
 
+/* ===== Texte nie abschneiden ===== */
+.h-tx b,.h-tx span{white-space:normal !important;overflow:visible !important;text-overflow:clip !important}
+.v2-mds{white-space:normal !important;overflow:visible !important;text-overflow:clip !important}
+.h-facts{display:grid !important;grid-template-columns:1fr 1fr;gap:8px;overflow:visible !important;width:auto !important;min-width:0 !important;padding:0 14px 4px !important}
+.h-f{width:auto !important;min-width:0}
+.h-f em,.h-f span{white-space:normal !important;overflow:visible !important;text-overflow:clip !important}
+.sv-bt b,.sv-bt span{white-space:normal !important}
+.sv-banner.done .sv-bt{flex-wrap:wrap !important}.sv-banner.done .sv-bt b{white-space:normal !important;flex:1 1 100%}.sv-banner.done .sv-bt span{max-width:none !important}
+.c1-p span,.pin-n,.v2-bn,.h-trw b{white-space:normal !important;overflow-wrap:anywhere}
+.hdr-poll{white-space:normal !important;flex-wrap:wrap;row-gap:0}
+
 </style>
 </head>
 <body>
@@ -889,7 +900,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-14.1";
+const APP_VERSION = "2026-11-14.2";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1164,12 +1175,12 @@ function render(){
   } else if(cfg){
 
     if(S.view==="home"){
-      html += doorBig() + liveRoundsCard() + pinBanner();
+      html += surveyBanners() + doorBig() + liveRoundsCard() + pinBanner();
       const c = funCard();
       // Am Spieltag steht die Matchday-Karte oben, danach ist die Abstimmung für den nächsten Termin das Wichtigste: ganz oben angepinnt
       const ns = nextSession(); const full = ns && pollFor(ns.key).play.length >= 4;
       // offene Abstimmung ganz oben angepinnt; steht das Spiel, rutscht sie kompakt nach unten (in viewHome)
-      html += c ? todoCard() + surveyDone() + recapHome() + c : (full ? "" : pollCard()) + todoCard() + surveyDone() + recapHome();
+      html += c ? todoCard() + recapHome() + c : (full ? "" : pollCard()) + todoCard() + recapHome();
     }
     html += ({home:viewHome, tabelle:viewTable, spieltage:viewMatchdays, kasse:viewCash, einstellungen:viewSettings}[S.view])();
   }
@@ -1952,12 +1963,6 @@ function todoCard(){
           ${open ? `<div class="door-f"><input class="input" id="door-in" maxlength="20" autocomplete="off" value="${esc(dc?.code||"")}" placeholder="Code"><button class="btn sm primary" data-act="door-save" data-key="${esc(ns.key)}">Speichern</button></div>` : ""}</div>
           ${open ? "" : `<button class="btn sm primary" data-act="door-edit" data-key="${esc(ns.key)}">Eintragen</button>`}</div>`);
       } } }
-  // laufende Umfragen (solange nicht alle abgestimmt haben)
-  for(const s of S.surveys.filter(svRunning).sort((a,b)=>(b.at||0)-(a.at||0))){
-    const V = S.svotes.filter(v => v.sid===s.id); if(players().length && players().every(p => V.some(v => v.pid===p.id))) continue;
-    const voted = V.some(v => v.pid===me);
-    rows.push(`<div class="h-tr click" data-act="nav" data-view="tabelle" data-tsub="sv" data-sv="${esc(s.id)}"><span class="h-ic">${IC.poll}</span><div class="h-tx"><b>Umfrage: ${esc(s.q)}</b><span>von ${esc(pname(s.by))} · ${svLeft(s)} · ${voted ? "du hast abgestimmt" : "<em>jetzt abstimmen</em>"}</span></div><span class="h-ch">${ICON.chev}</span></div>`);
-  }
   // fehlende Ergebnisse
   const L = missingResults();
   if(L.length) rows.push(`<div class="h-tr click" data-act="nav" data-view="spieltage" data-md-open="${esc(L[0].md.id)}"><span class="h-ic">${IC.res}</span><div class="h-tx"><b>${L.length===1 ? "Ergebnisse fehlen" : `Ergebnisse fehlen bei ${L.length} Spieltagen`}</b><span>${L.map(x => "Spieltag "+x.n).join(", ")}</span></div><span class="h-ch">${ICON.chev}</span></div>`);
