@@ -855,7 +855,7 @@ img,svg{max-width:100%}
 .acc-s,.h-tm>span:not(.h-mav){white-space:normal !important;overflow:visible !important;text-overflow:clip !important}
 .input,input,select,textarea{min-width:0;max-width:100%;box-sizing:border-box}
 .grid2>*,.row>*,.field>*{min-width:0}
-input[type=date],input[type=time]{width:100%;-webkit-appearance:none;appearance:none}
+input[type=date],input[type=time]{width:100%;display:block;min-height:44px}
 .pill{white-space:normal !important;text-align:left}
 .sheet,.sheet-body{max-width:100vw;overflow-x:hidden}
 @media (max-width:379px){
@@ -866,6 +866,14 @@ input[type=date],input[type=time]{width:100%;-webkit-appearance:none;appearance:
   .tab span{font-size:10px;letter-spacing:0}
   .acc-head{gap:10px}
 }
+
+/* ===== Fenster (Bottom-Sheet) auf dem iPhone: nie abgeschnitten, immer scrollbar ===== */
+.sheet{max-height:94%;max-height:calc(100dvh - env(safe-area-inset-top) - 12px)}
+.sheet-head,.sheet-foot{flex:none}
+.sheet-body{flex:1 1 auto;min-height:0;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding-bottom:20px}
+.sheet-foot .btn{white-space:nowrap}
+.sheet-body .chips{flex-wrap:wrap}
+.sheet-body .note{overflow-wrap:anywhere}
 
 </style>
 </head>
@@ -916,7 +924,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-14.3";
+const APP_VERSION = "2026-11-14.4";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -2019,8 +2027,6 @@ return function clean(root){
 /* Zoom-Gesten verhindern (iOS ignoriert user-scalable teilweise) */
 ["gesturestart","gesturechange","gestureend"].forEach(t => document.addEventListener(t, e => e.preventDefault(), {passive:false}));
 document.addEventListener("touchmove", e => { if(e.touches && e.touches.length > 1) e.preventDefault(); }, {passive:false});
-let _lastTouch = 0;
-document.addEventListener("touchend", e => { const n = Date.now(); if(n - _lastTouch < 300 && !e.target.closest("input,textarea,select")) e.preventDefault(); _lastTouch = n; }, {passive:false});
 function funCard(){
   if(!S.config) return "";
   const ns = nextSession(); if(!ns || ns.key !== today()) return "";
