@@ -875,6 +875,9 @@ input[type=date],input[type=time]{width:100%;display:block;min-height:44px}
 .sheet-body .chips{flex-wrap:wrap}
 .sheet-body .note{overflow-wrap:anywhere}
 
+.tab[hidden]{display:none !important}
+
+
 </style>
 </head>
 <body>
@@ -924,7 +927,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-14.4";
+const APP_VERSION = "2026-11-14.5";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1145,8 +1148,10 @@ function updateAlarm(){
 function modalAlerts(){
   return { title:"Zu erledigen", html: (resultsCard() + requestsCard() + confirmCard()) || `<div class="empty">Alles erledigt ✓</div>`, foot:"" };
 }
+const meGuest = () => { const m = getMe(); return !!m && isGuest(m); };
 function render(){
   S._elo = null;
+  { const g = meGuest(); const t = $("tab-einstellungen"); if(t) t.hidden = g; if(g && S.view==="einstellungen"){ S.view = "home"; history.replaceState(null,"","#home"); } }
   try{ updateAlarm(); }catch{}
   tickCountdown();
   const cfg = S.config;
@@ -1781,7 +1786,8 @@ function viewMe(){
     ${row("Bester Partner", bestP ? `${esc(pname(bestP.id))} · ${Math.round(bestP.s/bestP.sp*100)} %` : "–")}
     ${row("Angstgegner", nemesis ? `${esc(pname(nemesis.id))} · ${Math.round(nemesis.s/nemesis.sp*100)} %` : "–")}
   </section>
-  <button class="v2-link" data-act="player" data-id="${esc(me)}">Alle Statistiken & Verlauf ${ICON.chev}</button>`;
+  <button class="v2-link" data-act="player" data-id="${esc(me)}">Alle Statistiken & Verlauf ${ICON.chev}</button>
+  ${meGuest() ? secHead("Benachrichtigungen") + `<section class="card">${pushCard()}</section>` : ""}`;
 }
 /* ---------- Matchday-Rückblick: nach Spielende einen Tag lang ganz oben ---------- */
 function recapHome(){
@@ -2149,7 +2155,7 @@ function viewMatchdays(){
 function mdBlock(md, nums, FC, isTop){
   const cost = num(md.courtCost); const parts = md.participants||[];
   const paidN = parts.filter(id => md.paid?.[id] || FC.covered.has(md.id+"|"+id)).length;
-  const payPill = md.outside ? `<span class="pill info">Außerhalb Abo · ${eur.format(cost)}${md.outsidePaidBy && md.outsidePaidBy!=="self" ? " · " + esc(pname(md.outsidePaidBy)) : ""}</span>` : cost>0 && parts.length ? (paidN===parts.length ? `<span class="pill good">${eur.format(cost)} · bezahlt</span>` : `<span class="pill bad">${paidN}/${parts.length} bezahlt</span>`) : `<span class="pill neutral">ohne Kosten</span>`;
+  const payPill = meGuest() ? "" : md.outside ? `<span class="pill info">Außerhalb Abo · ${eur.format(cost)}${md.outsidePaidBy && md.outsidePaidBy!=="self" ? " · " + esc(pname(md.outsidePaidBy)) : ""}</span>` : cost>0 && parts.length ? (paidN===parts.length ? `<span class="pill good">${eur.format(cost)} · bezahlt</span>` : `<span class="pill bad">${paidN}/${parts.length} bezahlt</span>`) : `<span class="pill neutral">ohne Kosten</span>`;
   const d = md.date ? new Date(md.date+"T12:00:00") : null; const okd = d && !isNaN(d);
   const wd = okd ? d.toLocaleDateString("de-DE",{weekday:"long"}) : "";
   const winners = dayRanking(md).winners;
@@ -2408,7 +2414,20 @@ function accountDetails(F, x){
     ${canWrite() && x.bal < -0.004 ? `<div class="row">${canPP?`<button class="btn primary sm" data-act="pp" data-id="${esc(x.id)}" data-amt="${-x.bal}">${PP_ICON}PayPal ${eur.format(-x.bal)}</button>`:""}<button class="btn sm" data-act="settle" data-id="${esc(x.id)}" data-amt="${-x.bal}">Begleichen</button></div>` : ""}
   </div>`;
 }
+function viewCashGuest(){
+  const F = finance(); const me = getMe(); const mine = F.guestRows.find(x=>x.id===me) || F.rows.find(x=>x.id===me) || {id:me, bal:0};
+  const neg = mine.bal < -0.004; const om = openMdFor(F, me); const nums = mdNumbers(); const own = ppOwner() || cashier();
+  return `<section class="card v2-acc ${neg?"neg":""}">
+      <div class="v2-al">Mein Konto</div>
+      <div class="v2-ab"><b class="${neg?"neg":mine.bal>0.004?"pos":""}">${neg?"−":mine.bal>0.004?"+":""}${eur.format(Math.abs(mine.bal))}</b></div>
+      <div class="v2-as">${neg ? `noch offen${om.length?` · ${om.map(o=>"ST "+nums[o.md.id]).join(", ")}`:""}` : "alles bezahlt"}</div>
+      ${neg && canWrite() && ppReady() && own ? `<div class="v2-aa" style="grid-template-columns:1fr"><button class="btn primary" data-act="pp" data-id="${esc(me)}" data-amt="${-mine.bal}">${PP_ICON}Mit PayPal an ${esc(pname(own))} zahlen</button></div>` : ""}
+      ${pendingFrom(me) ? `<div class="notice small" style="margin-top:8px">⏳ ${eur.format(pendingFrom(me))} warten auf Bestätigung durch ${esc(pname(own))}.</div>` : ""}
+    </section>
+    <p class="v2-note">Als Gast zahlst du deinen Anteil bitte per PayPal an ${esc(pname(own))}. ${esc(pname(own))} bestätigt die Zahlung, danach ist sie hier verbucht.</p>`;
+}
 function viewCash(){
+  if(meGuest()) return viewCashGuest();
   const F = finance(); const me = getMe(); const mine = me ? [...F.rows, ...F.guestRows].find(x=>x.id===me) || {id:me, owed:0, paid:0, bal:0} : null;
   const owner = ppOwner() || cashier(); const ownerAcc = owner ? F.rows.find(x=>x.id===owner) : null;
   const all = [...F.rows, ...F.guestRows].sort((a,b) => a.bal-b.bal || pname(a.id).localeCompare(pname(b.id)));
@@ -2700,7 +2719,7 @@ function modalPlayer(){
     <div class="sect"><h3>Mit Partner</h3><div class="card" style="padding:12px 14px">${relTable(P.partners,"Partner")}</div></div>
     <div class="sect"><h3>Gegen Gegner</h3><div class="card" style="padding:12px 14px">${relTable(P.opps,"Gegner")}</div></div>
     <div class="sect"><h3>Letzte Matches</h3><div class="card" style="padding:12px 14px"><div class="list">${last}</div></div></div>` : `<div class="empty">Noch keine Matches gespielt.</div>`}
-    ${acc ? `<div class="sect"><h3>Kasse</h3><div class="card" style="padding:12px 14px"><div class="li" style="padding:0"><div class="meta num">Anteil ${eur.format(acc.owed)} · bezahlt ${eur.format(acc.paid)}</div><div class="amt">${balAmt(acc.bal)}</div></div></div></div>` : ""}
+    ${acc && !meGuest() ? `<div class="sect"><h3>Kasse</h3><div class="card" style="padding:12px 14px"><div class="li" style="padding:0"><div class="meta num">Anteil ${eur.format(acc.owed)} · bezahlt ${eur.format(acc.paid)}</div><div class="amt">${balAmt(acc.bal)}</div></div></div></div>` : ""}
     <button class="btn" data-act="compare" data-id="${esc(id)}" id="btnCmpFrom">Mit anderem Spieler vergleichen</button>`,
     foot: "" };
 }
@@ -3036,6 +3055,7 @@ async function saveCost(){
 document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if(!el || el.disabled) return;
   const a = el.dataset.act, id = el.dataset.id, d = S.draft;
+  if(meGuest() && ["new-pay","new-cost","settle","pp-topup","cash-sub","acc","mark-paid","open-settings","cash-more","led-filter","led-all","del-led"].includes(a)) return;
   if(a!=="del-led" && a!=="md-delete" && a!=="mem-del" && a!=="bc-del" && a!=="sv-del" && a!=="cm-del") S.armed = null;
   switch(a){
     case "nav": if(el.dataset.view!=="kasse") S.cashSub = ""; S.view = el.dataset.view; if(el.dataset.tsub) S.tsub = el.dataset.tsub; if(el.dataset.mdOpen){ (S.mdOpen ||= new Set()).add(el.dataset.mdOpen); }
