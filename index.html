@@ -939,7 +939,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-15.2";
+const APP_VERSION = "2026-11-15.3";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -2747,7 +2747,7 @@ function tipCard(){
   const order = TIP_ORDER || (TIP_ORDER = (() => { const a = PADEL_TIPS.map((_,k)=>k); let x = 20261115; for(let k=a.length-1;k>0;k--){ x = (x*1103515245+12345) % 2147483648; const j = x % (k+1); [a[k],a[j]] = [a[j],a[k]]; } return a; })());
   const [cat, title, text, more] = PADEL_TIPS[order[i]];
   return `<section class="card tip"><div class="tip-h"><span class="tip-k">Padel-Tipp des Tages</span><span class="tip-c">${esc(cat)}</span></div>
-    <div class="tip-t">${esc(title)}</div><p class="tip-x">${esc(text)}</p>${more ? `<div class="tip-m"><span>So geht's</span><p>${esc(more)}</p></div>` : ""}<div class="tip-n">Tipp ${i+1} von ${N} · morgen gibt's den nächsten</div></section>`;
+    <div class="tip-t">${esc(title)}</div><p class="tip-x">${esc(text)}</p>${more ? `<div class="tip-m"><span>So geht's</span><p>${esc(more)}</p></div>` : ""}</section>`;
 }
 function funCard(){
   if(!S.config) return "";
