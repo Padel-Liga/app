@@ -939,7 +939,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-15.4";
+const APP_VERSION = "2026-11-15.5";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1455,7 +1455,7 @@ function resActions(md, m){
   const btn = (act, label, cls="") => `<button class="btn sm ${cls}" data-act="${act}" data-md="${esc(md.id)}" data-mid="${esc(m.id)}">${label}</button>`;
   if(m.status==="confirmed") return `<div class="resline"><span class="small muted">🔒 ${m.legacy ? "Ergebnis eingetragen" : `bestätigt von ${esc(pname(r?.confirmedBy))}`}</span></div>`;
   if(m.status==="proposed") return `<div class="resline"><span class="small" style="color:var(--warn,#B7791F)">⏳ eingetragen von ${esc(pname(r.by))}, wartet auf Bestätigung durch das andere Team</span>
-    ${role==="confirm" ? `<div class="row">${btn("res-ok","Bestätigen ✓","primary")}${btn("res-no","Ablehnen","danger")}</div>` : role==="waiting" ? `<div class="row">${btn("res-no","Zurückziehen","ghost")}</div>` : ""}</div>`;
+    ${role==="confirm" || isAdmin() ? `<div class="row">${btn("res-ok","Bestätigen ✓","primary")}${btn("res-no", role==="waiting" ? "Zurückziehen" : "Ablehnen","danger")}</div>` : role==="waiting" ? `<div class="row">${btn("res-no","Zurückziehen","ghost")}</div>` : ""}</div>`;
   if(role==="enter" && md.date && md.date <= today()) return `<div class="resline">${btn("res-enter","Ergebnis eintragen","primary")}</div>`;
   return "";
 }
