@@ -878,6 +878,18 @@ input[type=date],input[type=time]{width:100%;display:block;min-height:44px}
 .tab[hidden]{display:none !important}
 
 
+.tip{position:relative;overflow:hidden;padding:16px 16px 14px !important;border:0 !important;background:
+  linear-gradient(90deg,transparent calc(100% - 46px),rgba(238,227,174,.9) calc(100% - 46px),rgba(238,227,174,.9) calc(100% - 44px),transparent calc(100% - 44px)) 0 0/100% 100% no-repeat,
+  radial-gradient(130% 160% at 10% 0%,#2C62DA 0%,#1F51C6 50%,#173E9A 100%) !important;color:#fff}
+.tip-h{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.tip-k{font-size:10.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--optic,#D3E05B)}
+.tip-c{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:rgba(255,255,255,.14);border-radius:999px;padding:2px 9px;margin-right:52px}
+.tip-t{font-size:20px;font-weight:800;margin-top:8px;letter-spacing:-.01em;padding-right:52px}
+.tip-x{margin:6px 0 0;font-size:14.5px;line-height:1.5;color:rgba(255,255,255,.9);padding-right:52px}
+.tip-n{margin-top:10px;font-size:11.5px;color:rgba(255,255,255,.6)}
+
+.tip-m{margin-top:10px;padding:10px 12px;background:rgba(255,255,255,.10);border-radius:10px;margin-right:46px}.tip-m span{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--cline,#EEE3AE)}.tip-m p{margin:4px 0 0;font-size:13.5px;line-height:1.5;color:rgba(255,255,255,.88)}
+
 </style>
 </head>
 <body>
@@ -927,7 +939,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-14.5";
+const APP_VERSION = "2026-11-15.2";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1640,7 +1652,9 @@ function viewHome(){
       <div class="h-tab">${list.map((x,i) => `<div class="h-trw click" data-act="player" data-id="${esc(x.id)}" tabindex="0"><span class="rank" style="${ranked.length&&i===0?"background:var(--ball);color:var(--ball-ink)":""}">${ranked.length?i+1:"–"}</span>${avatar(x.id)}<b>${esc(pname(x.id))}${x.id===me?` <i class="v2-du">du</i>`:""}</b>${formHtml(x.form)}<span class="h-q">${x.sp?pct(x.quote):"–"}</span></div>`).join("")}</div></section>`
     : `<section class="card"><h2>Tabelle</h2><div class="muted small">Noch keine Ergebnisse.</div></section>`;
   const full = (() => { const ns = nextSession(); return ns && pollFor(ns.key).play.length >= 4; })();
-  return broadcastCards() + (funCard() || full ? pollCard() : "") + mini;
+  const fc = funCard();
+  // ohne Spieltag: Padel-Tipp des Tages; steht das Spiel, darf er über der (kompakten) Abstimmung stehen
+  return broadcastCards() + (fc ? pollCard() : full ? tipCard() + pollCard() : tipCard()) + mini;
 }
 /* ---------- Spieltag-Karte (Ticket mit Statistik-Kacheln) ---------- */
 function funTiles(key, play){
@@ -2033,6 +2047,708 @@ return function clean(root){
 /* Zoom-Gesten verhindern (iOS ignoriert user-scalable teilweise) */
 ["gesturestart","gesturechange","gestureend"].forEach(t => document.addEventListener(t, e => e.preventDefault(), {passive:false}));
 document.addEventListener("touchmove", e => { if(e.touches && e.touches.length > 1) e.preventDefault(); }, {passive:false});
+const PADEL_TIPS = [
+[
+"Technik",
+"Bandeja",
+"Die Bandeja ist kein Schmetterschlag: Schlag sie kontrolliert mit leichtem Slice, um die Netzposition zu halten, statt den Punkt zu erzwingen.",
+"Schläger hinter dem Kopf ausholen, seitlich zum Netz stehen und den Ball vor der Schulter treffen. Ziel ist die Ecke zum Gitter oder tief in die Mitte. Übung: Lass dir zehn Lobs zuspielen und spiele jede Bandeja bewusst langsam und tief."
+],
+[
+"Technik",
+"Vibora",
+"Die Víbora ist die aggressive Schwester der Bandeja: mehr Seitenschnitt, damit der Ball nach der Glaswand flach und seitlich wegspringt.",
+"Den Ball etwas höher und weiter seitlich treffen als bei der Bandeja und mit dem Handgelenk von außen nach innen ziehen. Ziel ist die Seitenwand des Gegners. Übung: Erst auf Platzierung achten, das Tempo kommt später von selbst."
+],
+[
+"Taktik",
+"Netzposition",
+"Wer das Netz hat, hat meist den Punkt. Gib die Netzposition nur auf, wenn ein Lob dich wirklich überspielt.",
+"Stehen zwei Spieler am Netz, decken sie fast den ganzen Platz ab. Darum spielt man Bälle von hinten so, dass man danach selbst nach vorne kann. Faustregel: Jeder Lob, der dich nicht ganz überspielt, wird mit Bandeja oder Volley beantwortet."
+],
+[
+"Taktik",
+"Lob",
+"Der Lob ist im Padel kein Notschlag, sondern der wichtigste Angriffsschlag von hinten – hoch und tief über die Gegner am Netz.",
+"Ziel des Lobs ist, dass die Gegner zur Glaswand zurück müssen und ihr das Netz übernehmt. Er muss hoch genug sein, damit sie ihn nicht smashen, und tief, damit er nah an der Rückwand landet. Übung: Zielt auf die letzten zwei Meter vor der Rückwand."
+],
+[
+"Regel",
+"Aufschlag",
+"Der Aufschlag wird von unten gespielt: Der Ball wird hinter der Aufschlaglinie aufgetippt und auf oder unter Hüfthöhe getroffen.",
+"Ein ruhiger, gleichmäßiger Aufschlag ist wichtiger als ein harter. Tipp: Mit leicht gebeugten Knien stehen, den Ball neben dem Körper fallen lassen und nach vorne durchschwingen."
+],
+[
+"Regel",
+"Aufschlag",
+"Der Aufschlag muss diagonal ins gegnerische Aufschlagfeld. Springt er danach ans Gitter statt ans Glas, ist es ein Fehler.",
+"Das Glas der Seitenwand gehört zum Spiel, das Gitter nicht. Nutze das: Ein Aufschlag, der nach dem Aufsprung ans Seitenglas läuft, ist erlaubt und für den Gegner unangenehm."
+],
+[
+"Regel",
+"Netz beim Aufschlag",
+"Berührt der Aufschlag das Netz und landet korrekt im Feld, wird er wiederholt – außer er trifft danach das Gitter.",
+"Das gilt nur für den Aufschlag. Im Ballwechsel ist ein Netzroller gültig und wird weitergespielt. Für den Return heißt das: Bei einem Netzroller gleich bereit sein, er kann den Rhythmus kosten."
+],
+[
+"Regel",
+"Eigene Wand",
+"Du darfst den Ball über deine eigene Glaswand zurück ins gegnerische Feld spielen – er muss nur über das Netz gehen, bevor er den Boden berührt.",
+"Diese Regel macht Padel besonders. Ist ein Ball zu weit hinter dir, schlage ihn gegen deine eigene Rückwand. Er prallt dann im Bogen über das Netz zurück. Das ist ein Notschlag, aber oft die letzte Rettung."
+],
+[
+"Regel",
+"Gegnerische Wand",
+"Trifft dein Ball auf der Gegnerseite direkt die Wand oder das Gitter, ohne vorher aufzukommen, ist der Punkt verloren.",
+"Deshalb ist es so wichtig, dass ein harter Smash zuerst auf dem Boden landet. Erst danach darf er an die Glaswand springen. Zielt also lieber etwas kürzer als zu lang."
+],
+[
+"Regel",
+"Zwei Aufschläge",
+"Wie im Tennis hast du zwei Aufschlagversuche. Nutze den ersten für Platzierung, nicht für Tempo.",
+"Der zweite Aufschlag sollte praktisch nie ins Aus gehen. Ein sicherer, platzierter Ball auf die Rückhand des Gegners ist oft wirksamer als ein riskanter erster."
+],
+[
+"Technik",
+"Griff",
+"Ein Continental-Griff (wie beim Hammerhalten) funktioniert für fast alle Schläge – Vorhand, Rückhand, Volley und Bandeja.",
+"Mit dem Continental-Griff musst du am Netz nicht umgreifen, das spart wertvolle Zehntelsekunden. Er fühlt sich am Anfang ungewohnt an. Bleib aber dabei, nach ein paar Spieltagen ist er selbstverständlich."
+],
+[
+"Technik",
+"Volley",
+"Volleys im Padel sind kurz und blockend: wenig Ausholbewegung, Schläger vor dem Körper, Ball früh nehmen.",
+"Der Ball wird im Padel nach dem Volley nicht „abgeschossen“, sondern platziert. Am besten tief zu den Füßen der Gegner oder in die Mitte. Übung: Volley-Wechsel am Netz, bei dem beide nur blocken und nicht schlagen."
+],
+[
+"Taktik",
+"Mitte",
+"Im Zweifel durch die Mitte spielen: Zwischen den beiden Gegnern entsteht oft Unsicherheit, wer den Ball nimmt.",
+"Spielt man in die Mitte, reduziert man außerdem die Winkel für den Gegner, und das Risiko für ein Aus ist kleiner. Absprache im eigenen Team: Wer bei Bällen in der Mitte übernimmt, ist meist der mit der Vorhand dort."
+],
+[
+"Taktik",
+"Geduld",
+"Padel gewinnt man mit Geduld. Ein Fehler weniger ist meist mehr wert als ein Gewinnschlag mehr.",
+"Im Padel enden die meisten Punkte durch Fehler, nicht durch Gewinnschläge. Wer einen Ball mehr zurückspielt als der Gegner, gewinnt erstaunlich viele Spiele. Merke: sicher, tief, geduldig."
+],
+[
+"Technik",
+"Glaswand",
+"Lass Bälle an der Rückwand ruhig kommen: Erst nach dem Abprall drehst du dich mit und spielst ihn kontrolliert zurück.",
+"Der häufigste Fehler ist, zu nah an der Wand zu stehen. Mach zwei Schritte Richtung Netz, lass den Ball abprallen und triff ihn, wenn er wieder zu dir kommt. Übung: Partner spielt Bälle an die Rückwand, du spielst nur zurück."
+],
+[
+"Technik",
+"Seitenwand",
+"Bei Bällen in die Ecke (Rück- und Seitenwand) bleib weit weg vom Glas – der Ball kommt nach dem zweiten Abprall zu dir.",
+"Ecken sind tückisch, weil der Ball zweimal abprallt und die Richtung wechselt. Bleibe im Zweifel lieber etwas weiter in der Feldmitte und lass den Ball kommen. Der zweite Abprall bringt ihn fast immer zu dir."
+],
+[
+"Taktik",
+"Chiquita",
+"Die Chiquita ist ein kurzer, flacher Ball vor die Füße der Netzspieler – ideal, um selbst ans Netz vorzurücken.",
+"Die Chiquita funktioniert besonders gut gegen große Spieler am Netz, die sich bücken müssen. Danach sofort gemeinsam nach vorne gehen, denn der Gegner kann meist nur hoch zurückspielen."
+],
+[
+"Ausrüstung",
+"Handschlaufe",
+"Die Schlaufe am Schläger ist Pflicht: Sie gehört ums Handgelenk und schützt Mitspieler und Glas.",
+"Bei schnellen Ballwechseln am Netz kann der Schläger leicht aus der Hand rutschen. Mit der Schlaufe passiert das nicht. Achte darauf, dass sie eng genug sitzt, aber nicht abschnürt."
+],
+[
+"Ausrüstung",
+"Schuhe",
+"Padelschuhe mit Fischgrät- oder Omni-Sohle geben auf Kunstrasen mit Sand deutlich mehr Halt als Laufschuhe.",
+"Padelplätze haben Sand auf dem Kunstrasen, normale Laufschuhe rutschen darauf weg. Gute Padelschuhe geben seitlichen Halt und schützen so vor umgeknickten Knöcheln."
+],
+[
+"Ausrüstung",
+"Bälle",
+"Padelbälle haben weniger Innendruck als Tennisbälle. Nach ein paar Spieltagen werden sie spürbar langsamer – rechtzeitig wechseln.",
+"Mit alten Bällen werden die Ballwechsel länger und die Wände wirken weniger. Wer regelmäßig spielt, sollte spätestens alle zwei bis drei Spieltage frische Bälle aufmachen."
+],
+[
+"Taktik",
+"Kommunikation",
+"Sagt laut „Ich“ oder „Du“ bei Bällen in der Mitte. Ein kurzes Wort spart viele unnötige Fehler.",
+"Gerade bei Lobs in die Mitte kommt es oft zu „Mein Ball, dein Ball“-Momenten. Vereinbart vor dem Spiel: Bei Lobs übernimmt, wer den Ball mit der Vorhand bzw. für die Bandeja besser erreicht."
+],
+[
+"Taktik",
+"Paralleles Bewegen",
+"Bewegt euch als Team wie an einer Schnur: Geht einer ans Netz, geht der andere mit. Nie einer vorne, einer hinten.",
+"Wenn einer vorne und einer hinten steht, entsteht ein großes Loch diagonal durchs Feld. Genau dort spielen gute Gegner hin. Übung: Bei jedem Punkt bewusst darauf achten, auf gleicher Höhe zu stehen."
+],
+[
+"Technik",
+"Smash",
+"Den Smash nur spielen, wenn der Ball wirklich hoch und nah am Netz ist – sonst ist die Bandeja die sicherere Wahl.",
+"Ein misslungener Smash gibt dem Gegner oft einen leichten Ball und die Netzposition. Die Bandeja hält den Ball im Spiel und eure Position stabil. Smash nur, wenn der Ball nah ans Netz kommt."
+],
+[
+"Technik",
+"Por tres",
+"Beim „Por tres“ wird der Smash so hart gespielt, dass der Ball über die gegnerische Rückwand ins Aus springt – nur bei perfekter Position versuchen.",
+"Für den „Por tres“ braucht es Kraft und Position: nah am Netz, der Ball hoch und ruhig. Ziel ist ein Aufsprung kurz vor der Rückwand, damit er darüber springt. Im Training ausprobieren, im Spiel sparsam einsetzen."
+],
+[
+"Regel",
+"Ball aus dem Käfig",
+"Springt ein Ball über die gegnerische Wand nach draußen, darf er – wenn der Platz Ausgänge hat – außerhalb gespielt werden.",
+"Raus aus dem Käfig darfst du nur, wenn der Platz seitliche Ausgänge hat und der Ball nicht vorher zweimal aufgekommen ist. Draußen spielt man ihn zurück übers Netz ins Feld. Das sieht spektakulär aus und ist erlaubt."
+],
+[
+"Regel",
+"Netz berühren",
+"Du darfst das Netz während des Ballwechsels weder mit Körper noch Schläger berühren – das kostet den Punkt.",
+"Das passiert besonders bei Volleys nah am Netz oder beim Smash, wenn man durchschwingt. Besser kontrolliert ausschwingen und nicht zu nah ans Netz laufen."
+],
+[
+"Regel",
+"Golden Point",
+"Beim Golden Point (Einstand ohne Vorteil) entscheidet ein einziger Punkt das Spiel. Die Rückschläger wählen die Seite.",
+"Golden Point heißt: Bei 40:40 spielt man genau einen Entscheidungspunkt, ohne Vorteil. Das macht Spiele kürzer und spannender. Klärt vor dem Spiel, ob ihr mit Golden Point oder mit Vorteil spielt."
+],
+[
+"Taktik",
+"Aufschlag aufs T",
+"Ein Aufschlag in die Mitte (aufs T) verkleinert die Winkel des Returns und macht das Vorrücken ans Netz leichter.",
+"Aufs T heißt in die Mitte, dort wo Mittellinie und Aufschlaglinie sich treffen. Der Rückschläger hat dann weniger Winkel und kann den Ball schwer seitlich an euch vorbeispielen. Danach sofort ans Netz."
+],
+[
+"Taktik",
+"Aufschlag an die Wand",
+"Ein Aufschlag, der nach dem Aufsprung ans Seitenglas läuft, zwingt den Gegner zu einem unbequemen Return.",
+"Der Ball wird dabei zur Seitenwand gezielt, nicht ins Feld-Innere. Der Rückschläger muss sich mit dem Ball drehen und kann kaum angreifen. Achtung: Er darf nach dem Aufsprung nicht ans Gitter."
+],
+[
+"Technik",
+"Return",
+"Returniere bevorzugt mit einem flachen Ball auf die Füße des vorrückenden Aufschlägers oder mit einem hohen Lob.",
+"Beim Return willst du verhindern, dass der Aufschläger leicht ans Netz kommt. Ein flacher Ball auf seine Füße oder ein hoher Lob über den Netzspieler sind die zwei besten Optionen."
+],
+[
+"Technik",
+"Bajada",
+"Die Bajada: Ein hoher Ball prallt von der Rückwand ab, und du schlägst ihn im Herunterkommen offensiv – ein Schlag für Fortgeschrittene.",
+"Die Bajada spielt man, wenn ein hoher Ball weit von der Rückwand abprallt und nochmal hochkommt. Man trifft ihn im Fallen über Kopfhöhe und spielt ihn flach und schnell zurück. Für Einsteiger gilt: erst sicher, dann schnell."
+],
+[
+"Taktik",
+"Tiefe",
+"Je tiefer dein Ball beim Gegner landet, desto schwerer kann er angreifen. Tiefe ist wichtiger als Tempo.",
+"Ein Ball, der tief beim Gegner landet, zwingt ihn hinten zu bleiben. Ein kurzer Ball dagegen lädt ihn ein, ans Netz zu kommen. Übung: Zielt beim Einschlagen auf das hintere Drittel des Feldes."
+],
+[
+"Taktik",
+"Langsam spielen",
+"Tempo raus nehmen ist eine Waffe: Langsame, tiefe Bälle zwingen die Gegner, selbst Druck zu erzeugen.",
+"Viele Hobbyspieler machen bei langsamen Bällen mehr Fehler als bei schnellen, weil sie selbst Tempo erzeugen müssen. Nutzt das: Ein ruhiger, tiefer Ball ist oft unangenehmer als ein harter."
+],
+[
+"Technik",
+"Beinarbeit",
+"Kleine, schnelle Schritte vor jedem Schlag – im Padel ist der Platz klein, gute Position schlägt große Schritte.",
+"Die meisten Fehler entstehen nicht beim Schlag, sondern weil man falsch steht. Mache lieber drei kleine Schritte als einen großen, so bist du beim Treffpunkt stabil."
+],
+[
+"Technik",
+"Split-Step",
+"Ein kleiner Sprung (Split-Step), wenn der Gegner den Ball trifft, macht dich in alle Richtungen schneller.",
+"Kurz bevor der Gegner den Ball trifft, mit beiden Füßen leicht abspringen und breitbeinig landen. So bist du in alle Richtungen startbereit. Profis machen das bei jedem einzelnen Schlag."
+],
+[
+"Fitness",
+"Aufwärmen",
+"Zehn Minuten Aufwärmen mit lockerem Spiel aus der Mitte schützen Schulter und Ellbogen – besonders an kalten Abenden.",
+"Beginnt mit lockerem Spiel im Mini-Feld, dann Volleys, dann ein paar Lobs und Bandejas. Erst danach mit vollem Tempo spielen. Das senkt die Verletzungsgefahr deutlich."
+],
+[
+"Fitness",
+"Tennisarm",
+"Ein zu fest gehaltener Schläger belastet den Ellbogen. Locker greifen – erst beim Treffpunkt fester.",
+"Wer den Schläger zu fest hält, überträgt jeden Stoß in den Ellbogen. Halte den Griff locker, etwa auf einer Skala von 3 bis 4 von 10, und spanne erst beim Treffen an."
+],
+[
+"Fitness",
+"Trinken",
+"Auch in der Halle verliert man beim Padel viel Flüssigkeit. Zwischen den Runden immer ein paar Schlucke trinken.",
+"Schon wenig Flüssigkeitsverlust senkt Konzentration und Reaktion spürbar. Eine Flasche Wasser gehört auf jeden Spieltag. Zwischen den Runden ein paar Schlucke reichen."
+],
+[
+"Taktik",
+"Seitenwahl",
+"Der Spieler mit der stärkeren Vorhand spielt meist rechts, der mit dem besseren Smash und Rückhand oft links.",
+"Die Mitte ist der wichtigste Bereich auf dem Platz. Der Spieler, dessen Vorhand zur Mitte zeigt, sollte dort die meisten Bälle übernehmen. Das spricht für die Seitenwahl."
+],
+[
+"Taktik",
+"Linke Seite",
+"Auf der linken Seite (Rückhandseite) stehen meist die Spieler, die Schmetterbälle und Bandejas aus der Mitte übernehmen.",
+"Links bekommt man viele hohe Bälle in die Mitte, die man mit der Vorhand über Kopf spielen kann. Deshalb steht dort oft der Spieler mit dem besseren Überkopfspiel."
+],
+[
+"Technik",
+"Kontakt vor dem Körper",
+"Triff den Ball immer vor dem Körper – so bleibt der Schlag kontrolliert, auch unter Druck.",
+"Wer den Ball zu spät trifft, also neben oder hinter dem Körper, verliert Kontrolle und Richtung. Stell dir einen Punkt etwa einen halben Meter vor deinem vorderen Fuß als Treffpunkt vor."
+],
+[
+"Technik",
+"Schläger hoch",
+"Am Netz den Schläger immer auf Brusthöhe halten. Von dort sind Vorhand- und Rückhandvolley gleich schnell.",
+"Ein hängender Schläger kostet am Netz die entscheidende Reaktionszeit. Nach jedem Schlag den Schläger sofort wieder vor die Brust holen, wie eine Grundstellung."
+],
+[
+"Taktik",
+"Gegner am Netz",
+"Stehen beide Gegner am Netz, ist ein guter Lob oder ein flacher Ball auf die Füße fast immer die beste Antwort.",
+"Netzspieler haben Probleme mit zwei Bällen: mit hohen Bällen über ihnen und mit Bällen direkt vor ihren Füßen. Alles dazwischen ist für sie einfach. Wechselt also zwischen sehr hoch und sehr flach."
+],
+[
+"Taktik",
+"Schwächeren anspielen",
+"Konzentriert euch auf den Gegner, der heute mehr Fehler macht – ohne es zu übertreiben, sonst wärmt er sich ein.",
+"Fehlerquoten schwanken von Tag zu Tag. Bemerkt ihr, dass ein Gegner heute unsicher ist, spielt etwas mehr zu ihm. Aber nicht ausschließlich, sonst findet er seinen Rhythmus."
+],
+[
+"Technik",
+"Lob-Technik",
+"Für einen guten Lob den Schläger offen halten und von unten nach oben durchschwingen – lieber zu hoch als zu kurz.",
+"Der Lob gelingt am besten, wenn du den Ball etwas weiter vorne triffst und den Schläger nach oben „ausschwingst“. Ziel: Der höchste Punkt des Balls liegt über den Gegnern, der Aufsprung kurz vor ihrer Rückwand."
+],
+[
+"Taktik",
+"Nach dem Lob",
+"Nach einem guten Lob sofort gemeinsam ans Netz vorrücken – genau dafür spielt man ihn.",
+"Der Lob ist nur die halbe Miete, der Lohn ist die Netzposition. Sobald ihr seht, dass der Lob gut ist, beide gemeinsam nach vorne. Wer stehen bleibt, verschenkt den Vorteil."
+],
+[
+"Regel",
+"Doppelberührung",
+"Den Ball zweimal zu treffen oder ihn mit dem Schläger zu „tragen“, ist ein Fehler.",
+"Das passiert manchmal unabsichtlich bei Bällen an der Wand, wenn man den Ball „schiebt“. Gezielt und sauber schlagen statt zu schaufeln."
+],
+[
+"Regel",
+"Körpertreffer",
+"Trifft dich der Ball, bevor er aufkommt, verlierst du den Punkt – egal ob du im Feld oder außerhalb stehst.",
+"Das gilt auch für den eigenen Partner: Trifft dich der Ball deines Partners, verliert euer Team den Punkt. Am Netz also nicht in die Schlaglinie des Partners laufen."
+],
+[
+"Regel",
+"Aufschlagreihenfolge",
+"Der Aufschlag wechselt nach jedem Spiel zwischen den Teams, und innerhalb des Teams abwechselnd zwischen den Spielern.",
+"Einfach gesagt: Die Teams wechseln sich ab, und im Team wechselt man sich ab. Zu Beginn jedes Satzes darf das aufschlagende Team neu festlegen, wer zuerst aufschlägt."
+],
+[
+"Regel",
+"Seitenwechsel",
+"Die Seiten werden nach jedem ungeraden Spiel gewechselt – also nach dem 1., 3., 5. Spiel und so weiter.",
+"Mit dem Seitenwechsel gleichen sich Licht, Wand und Bodenverhältnisse aus. Nutzt die kurze Pause für einen Schluck Wasser und eine Taktik-Absprache."
+],
+[
+"Taktik",
+"Erster Volley",
+"Nach dem Aufschlag ist der erste Volley tief und kontrolliert, nicht hart – so gewinnst du die Netzposition.",
+"Der erste Volley nach dem Aufschlag kommt meist aus der Bewegung. Spiele ihn ruhig und tief, nicht auf Gewinn. Erst mit der stabilen Netzposition kommen die Chancen."
+],
+[
+"Technik",
+"Defensive Wand",
+"Spielst du einen Ball aus der Defensive über deine Wand, zielt hoch und mittig – das ist sicherer als knapp übers Netz.",
+"Ein Ball über die eigene Wand ist ein reiner Rettungsschlag. Je höher und mittiger er zurückkommt, desto mehr Zeit habt ihr, euch neu zu stellen."
+],
+[
+"Technik",
+"Rückhand",
+"Die Rückhand im Padel ist fast immer einhändig und kurz – wenig Ausholen, viel Kontrolle.",
+"Im Padel hat man selten Zeit für große Rückhand-Schwünge. Ein kurzer, kompakter Schlag mit festem Handgelenk ist sicherer und genauso wirksam."
+],
+[
+"Technik",
+"Slice",
+"Ein leichter Unterschnitt (Slice) lässt den Ball nach der Glaswand weniger hoch springen und erschwert den Angriff.",
+"Mit Slice bleibt der Ball flach und springt nach der Wand nicht hoch ab. Für den Gegner wird es dadurch schwer, aggressiv zu antworten. Übung: Den Schläger leicht öffnen und von oben nach unten durch den Ball ziehen."
+],
+[
+"Taktik",
+"Bälle ans Gitter",
+"Ein flacher Ball ans seitliche Gitter springt unberechenbar – gegen Netzspieler eine überraschende Option.",
+"Das Gitter ist unberechenbar: Der Ball kann tot liegen bleiben oder seitlich wegspringen. Einsetzen als Überraschung, nicht als Standard."
+],
+[
+"Taktik",
+"Smash-Lage",
+"Lass hohe Bälle, die du nicht sicher schlagen kannst, lieber an die Wand – nach dem Abprall wird es oft leichter.",
+"Viele Fehler entstehen, weil man hohe Bälle in schlechter Position smashen will. Lässt man sie an die Wand, wird der Ball langsamer und man kann ihn ruhig spielen."
+],
+[
+"Mental",
+"Nächster Punkt",
+"Ein verlorener Punkt ist sofort vorbei. Kurz durchatmen, Schläger richten, an den nächsten denken.",
+"Ein verlorener Punkt zählt genauso viel wie jeder andere. Wer sich über den letzten ärgert, verliert oft auch den nächsten. Hilfreich: kurz zur Rückwand gehen, durchatmen, neu starten."
+],
+[
+"Mental",
+"Partner loben",
+"Ein „Gut versucht“ an den Partner wirkt Wunder. Teams, die sich stärken, spielen nachweislich besser.",
+"Lob und Aufmunterung halten die Stimmung im Team. Gerade nach Fehlern hilft ein „Kein Problem, nächster“ mehr als ein Seufzer."
+],
+[
+"Mental",
+"Spielstand",
+"Bei 40:0 locker bleiben, bei 0:40 erst recht: Im Padel sind Aufholjagden wegen der langen Ballwechsel häufig.",
+"Durch die Wände und langen Ballwechsel dreht sich ein Spiel im Padel oft. Aufgeben gibt es nicht. Viele Spiele werden erst beim dritten oder vierten Einstand entschieden."
+],
+[
+"Ausrüstung",
+"Schlägerform",
+"Runde Schläger verzeihen mehr, Diamantform bringt mehr Power, Tropfenform liegt dazwischen.",
+"Der Sweetspot ist die Stelle, an der der Schläger am besten trifft. Er liegt bei runden Schlägern tief und ist groß, bei Diamantform weiter oben und kleiner. Für Hobbyspieler ist rund oder Tropfen meist die beste Wahl."
+],
+[
+"Ausrüstung",
+"Griffband",
+"Ein frisches Overgrip-Griffband gibt mehr Halt und schont den Arm. Bei Schweiß öfter wechseln.",
+"Ein abgenutztes Griffband wird glatt, dann greift man unbewusst fester zu. Das kostet Gefühl und belastet den Arm. Ein Overgrip kostet wenig und ist in einer Minute gewechselt."
+],
+[
+"Ausrüstung",
+"Schlägerschutz",
+"Ein Kantenschutz am Schläger verhindert Schäden, wenn man den Boden oder die Wand streift.",
+"Schläger sind aus Carbon oder Glasfaser und können bei Bodenkontakt splittern. Ein Kantenschutz verlängert die Lebensdauer deutlich."
+],
+[
+"Fitness",
+"Ausdauer",
+"Padel ist Intervallsport: kurze Sprints, viele Richtungswechsel. Treppen und Seitwärtsschritte sind ideales Training.",
+"Ein Padelspiel besteht aus vielen kurzen, intensiven Phasen. Training mit Intervallen, zum Beispiel 20 Sekunden schnell und 40 Sekunden locker, bereitet genau darauf vor."
+],
+[
+"Fitness",
+"Dehnen",
+"Nach dem Spiel Schultern, Unterarme und Waden kurz dehnen – das beugt Verspannungen am nächsten Tag vor.",
+"Nach dem Spiel sind die Muskeln warm, ideal zum Dehnen. Halte jede Dehnung etwa 20 bis 30 Sekunden, ohne zu wippen."
+],
+[
+"Technik",
+"Bälle tief nehmen",
+"Tiefe Bälle mit gebeugten Knien spielen, nicht mit gebeugtem Rücken – das bringt Kontrolle und schont den Rücken.",
+"Wer sich nach vorn bückt statt in die Knie zu gehen, schlägt ungenau und belastet den Rücken. Tief in die Knie gehen, Oberkörper aufrecht."
+],
+[
+"Taktik",
+"Zwischen die Gegner lobben",
+"Ein Lob über den linken Spieler zwingt ihn, mit der Rückhand zu antworten – oft die schwächere Seite.",
+"Die meisten Spieler spielen links mit der Rückhand zur Wand. Ein Lob über diesen Spieler muss er im Zurücklaufen mit der Rückhand spielen, das ist schwierig."
+],
+[
+"Taktik",
+"Gegen Linkshänder",
+"Spielt ein Linkshänder links, ist seine Vorhand in der Mitte. Dann lieber auf die Außenseite spielen.",
+"Bei Linkshändern auf der linken Seite zeigt die Vorhand zur Mitte. Wer gewohnt durch die Mitte spielt, spielt ihm dann genau auf seine Stärke."
+],
+[
+"Regel",
+"Ball im Netz",
+"Ein Ball, der das Netz berührt und trotzdem drüberfällt, ist im Ballwechsel gültig – im Gegensatz zum Aufschlag.",
+"Netzroller im Ballwechsel sind Glückssache, aber erlaubt. Nicht ärgern, sondern bereit bleiben, denn er kann trotzdem zurückkommen."
+],
+[
+"Regel",
+"Ball an der Decke",
+"In den meisten Hallen gilt: Trifft der Ball Decke oder Beleuchtung, ist er aus – wer ihn geschlagen hat, verliert den Punkt.",
+"Das ist besonders bei hohen Lobs wichtig: In niedrigen Hallen lieber etwas flacher lobben."
+],
+[
+"Regel",
+"Aus dem Feld",
+"Dein Ball muss auf der Gegnerseite zuerst den Boden berühren. Fliegt er direkt aus dem Käfig, ist er aus.",
+"Ein häufiger Fehler bei harten Smashes: Der Ball fliegt direkt an die Wand oder über sie. Dann ist er aus, auch wenn er danach ins Feld zurückspringt."
+],
+[
+"Taktik",
+"Bandeja-Ziel",
+"Spiel die Bandeja bevorzugt zum Gitter oder auf die Rückhandseite des Gegners – so kommt der Ball schwer zurück.",
+"Am Gitter springt der Ball oft tot ab, auf der Rückhandseite muss der Gegner aus schwieriger Position spielen. Beides macht den Gegenangriff schwer."
+],
+[
+"Taktik",
+"Gegner lesen",
+"Achte auf die Schlägerstellung des Gegners: Ein offener Schläger kündigt oft einen Lob an.",
+"Typische Signale: Ein offener Schläger und ein Schritt zurück kündigen einen Lob an, ein geschlossener Schläger einen flachen Ball. Wer die Signale liest, steht früher richtig."
+],
+[
+"Technik",
+"Kurzer Ausholer",
+"Am Netz zählt Reaktion statt Kraft: Kurze Ausholbewegung, der Ball liefert das Tempo.",
+"Am Netz ist der Ball meist schnell. Mit kurzer Bewegung und festem Handgelenk spielst du ihn genauer zurück als mit großem Schwung."
+],
+[
+"Technik",
+"Gewicht nach vorn",
+"Bei jedem Schlag das Gewicht leicht nach vorn verlagern – das gibt Stabilität und Druck ohne Kraftaufwand.",
+"Wer beim Schlag nach hinten fällt, verliert Kontrolle. Den Schritt in den Ball machen, dann kommt das Tempo aus dem Körper und nicht aus dem Arm."
+],
+[
+"Mental",
+"Routine",
+"Eine kleine Routine vor dem Aufschlag, etwa zweimal tippen, hilft, in wichtigen Punkten ruhig zu bleiben.",
+"Rituale geben Sicherheit. Viele Profis haben eine feste Abfolge vor dem Aufschlag, so wird jeder Aufschlag gleich, auch bei 40:40."
+],
+[
+"Taktik",
+"Spielstand nutzen",
+"Bei Führung sicher spielen und Fehler vermeiden, bei Rückstand gezielt das Risiko erhöhen.",
+"In Führung reicht es, den Gegner zu Fehlern zu zwingen. Im Rückstand braucht es mehr Initiative, etwa einen frühen Angriff ans Netz."
+],
+[
+"Fitness",
+"Schlaf",
+"Gut geschlafen spielt sich's besser: Reaktionszeit und Koordination leiden spürbar bei Schlafmangel.",
+"Schon eine kurze Nacht macht sich in der Reaktionszeit bemerkbar. Vor einem Spieltag lieber rechtzeitig ins Bett."
+],
+[
+"Fitness",
+"Essen",
+"Zwei bis drei Stunden vor dem Spiel etwas Leichtes mit Kohlenhydraten essen – das gibt Energie bis zur Extra-Runde.",
+"Ideal sind leichte Mahlzeiten wie Nudeln, Reis oder ein Brot mit Banane. Schweres Essen kurz vor dem Spiel macht träge."
+],
+[
+"Regel",
+"Ende des Ballwechsels",
+"Ein Ballwechsel endet erst, wenn der Ball zweimal aufkommt oder ins Aus geht – nicht schon, wenn er die Wand trifft.",
+"Erst wenn der Ball zweimal auf deiner Seite aufkommt, ist der Punkt verloren. Bis dahin lohnt es sich, ihm hinterherzulaufen, auch nach der Wand."
+],
+[
+"Technik",
+"Zweite Wand",
+"Bälle, die erst die Rück- und dann die Seitenwand treffen, kommen schräg zurück. Mitdrehen und Abstand halten.",
+"Bei Bällen in die Ecke trifft der Ball zuerst die Rückwand, dann die Seitenwand. Danach kommt er Richtung Feldmitte zurück. Dort solltest du ihn erwarten."
+],
+[
+"Technik",
+"Smash zur Seite",
+"Ein Smash Richtung Seitenwand (por cuatro) kann den Ball seitlich aus dem Käfig springen lassen – ein Spektakelschlag.",
+"Der „Por cuatro“ ist das seitliche Pendant zum „Por tres“: Der Ball springt seitlich durch den Ausgang aus dem Käfig. Nur auf Plätzen mit offenen Seiten möglich."
+],
+[
+"Taktik",
+"Nicht alles angreifen",
+"Nicht jeder hohe Ball ist eine Chance. Wer zu oft smasht, verliert die Netzposition schneller, als ihm lieb ist.",
+"Wer jeden hohen Ball angreift, macht Fehler und gibt die Netzposition her. Nur angreifen, wenn ihr in guter Position seid. Sonst lieber sicher zurückspielen."
+],
+[
+"Taktik",
+"Mittlere Höhe",
+"Bälle in mittlerer Höhe auf den Körper des Netzspielers sind schwer zu verarbeiten.",
+"Bälle auf Hüft- oder Brusthöhe direkt auf den Körper sind schwer, weil man nicht ausweichen kann. Mit einem Volley lässt sich dort kaum Druck machen."
+],
+[
+"Mental",
+"Spaß",
+"Padel ist ein Sozialsport. Wer mit Spaß spielt, spielt locker – und wer locker spielt, trifft besser.",
+"Gute Stimmung macht bessere Spieler. Ein kurzes Lachen nach einem verrückten Ballwechsel löst Verkrampfung."
+],
+[
+"Ausrüstung",
+"Schlägergewicht",
+"Ein leichterer Schläger (um 360 g) ist schneller am Netz, ein schwererer bringt mehr Stabilität bei Smashes.",
+"Ein schwererer Schläger liegt stabiler bei harten Bällen, ein leichterer ist wendiger am Netz. Teste verschiedene Gewichte, bevor du kaufst."
+],
+[
+"Ausrüstung",
+"Kälte",
+"Bei kalter Halle werden Bälle härter und langsamer. Ein paar Minuten Einspielen bringt sie auf Temperatur.",
+"Im Winter verlieren Bälle in kalten Hallen Sprungkraft. Die ersten Minuten bewusst einspielen und erst dann mit vollem Tempo starten."
+],
+[
+"Technik",
+"Kopf ruhig",
+"Den Kopf beim Treffpunkt ruhig halten und dem Ball bis zum Schläger nachsehen – der Klassiker gilt auch im Padel.",
+"Wer kurz vor dem Treffpunkt hochschaut, verzieht den Schlag. Den Blick auf den Treffpunkt richten, bis der Ball den Schläger verlassen hat."
+],
+[
+"Taktik",
+"Bälle im Spiel halten",
+"Bei Unsicherheit einfach den Ball hoch und tief zurückspielen. Im Padel gewinnt oft, wer den Ball länger im Spiel hält.",
+"Ein einfacher, hoher Ball zurück ist im Padel selten falsch. Er gibt euch Zeit, euch neu zu stellen, und zwingt den Gegner, selbst etwas zu tun."
+],
+[
+"Taktik",
+"Doppelgegner beobachten",
+"Beobachtet in den ersten Spielen, wer bei den Gegnern lobbt und wer smasht – dann stellt ihr euch darauf ein.",
+"In den ersten zwei Spielen lohnt es sich zu beobachten: Wer lobbt gern, wer smasht, wer macht Fehler auf der Rückhand? Danach könnt ihr gezielt spielen."
+],
+[
+"Regel",
+"Schläger fällt",
+"Verliert ein Spieler den Schläger und trifft damit den Ball, zählt der Schlag nicht – der Punkt geht verloren.",
+"Den Schläger zu werfen oder fallen zu lassen ist gefährlich und nicht erlaubt. Mit Schlaufe passiert das nicht."
+],
+[
+"Regel",
+"Behinderung",
+"Wird ein Spieler unabsichtlich behindert, etwa durch einen Ball vom Nachbarplatz, wird der Punkt wiederholt.",
+"Bei Behinderung durch einen fremden Ball sofort „Let“ rufen und den Punkt neu spielen. Das ist fair und vermeidet Diskussionen."
+],
+[
+"Technik",
+"Defensive Volley",
+"Kommt ein harter Ball auf dich zu, einfach den Schläger hinhalten und das Tempo nutzen – nicht selbst zuschlagen.",
+"Wenn ein harter Ball auf dich zukommt, keine große Bewegung machen. Einfach den Schläger hinhalten, der Ball prallt mit eigenem Tempo zurück."
+],
+[
+"Technik",
+"Gerade Rückwand",
+"Prallt ein Ball gerade von der Rückwand ab, stelle dich seitlich zur Wand – nicht frontal davor.",
+"Wer frontal vor der Wand steht, wird vom Ball „eingeklemmt“. Seitlich zur Wand stehen, den Ball vorbeilassen und dann spielen."
+],
+[
+"Taktik",
+"Tempowechsel",
+"Wechselt zwischen schnellen und langsamen Bällen. Ein gleichbleibender Rhythmus macht es den Gegnern leicht.",
+"Gleichförmiges Tempo macht es dem Gegner leicht, sich einzustellen. Ein Wechsel zwischen schnell und langsam bringt ihn aus dem Rhythmus."
+],
+[
+"Mental",
+"Atmen",
+"Beim Schlag ausatmen hilft, locker zu bleiben – und klingt profimäßig.",
+"Das Ausatmen beim Schlag entspannt die Muskulatur und hilft beim Timing. Viele Spieler atmen unbewusst ein und halten die Luft an, das macht steif."
+],
+[
+"Fitness",
+"Knie",
+"Bei Richtungswechseln die Knie leicht gebeugt lassen und nicht ins durchgestreckte Bein drehen – das schützt die Bänder.",
+"Ein durchgestrecktes Knie bei schnellen Drehungen kann Bänder überlasten. Bleibt leicht in der Hocke, das schützt und macht schneller."
+],
+[
+"Ausrüstung",
+"Kleidung",
+"Atmungsaktive Kleidung und ein Wechselshirt für die Pause machen die zweite Hälfte deutlich angenehmer.",
+"Nach einer langen Runde ist ein trockenes Shirt angenehmer und hält die Muskulatur warm. Gerade im Winter vermeidet das Verkühlung."
+],
+[
+"Technik",
+"Vorhand flach",
+"Eine flache Vorhand von hinten, knapp übers Netz, ist gegen vorrückende Gegner oft wirksamer als ein Lob.",
+"Eine flache, schnelle Vorhand bringt die Gegner, die gerade nach vorne laufen, in Bedrängnis. Sie müssen tief und unter Druck volleyen."
+],
+[
+"Regel",
+"Punkte zählen",
+"Gezählt wird wie im Tennis: 15, 30, 40, Spiel. Ein Satz geht bis 6 Spiele mit zwei Spielen Vorsprung.",
+"Der Satz wird bei 6:5 nicht beendet, erst bei 7:5. Bei 6:6 folgt der Tiebreak. Klärt vor dem Spieltag, ob ihr ganze Sätze oder eine feste Spielzeit spielt."
+],
+[
+"Regel",
+"Tiebreak",
+"Bei 6:6 entscheidet ein Tiebreak bis 7 Punkte mit zwei Punkten Vorsprung über den Satz.",
+"Im Tiebreak schlägt jeder Spieler zwei Mal hintereinander auf, außer beim ersten Punkt. Nach jeweils sechs Punkten werden die Seiten gewechselt."
+],
+[
+"Taktik",
+"Erster Punkt",
+"Der erste Punkt eines Spiels hat großes Gewicht – hier lieber sicher als spektakulär spielen.",
+"Ein gewonnener erster Punkt gibt Selbstvertrauen, ein verlorener setzt unter Druck. Darum zum Spielbeginn lieber auf sichere Bälle setzen."
+],
+[
+"Mental",
+"Fehler abhaken",
+"Profis vergessen Fehler nach Sekunden. Ein kurzes „weiter“ an dich selbst hilft, den Kopf frei zu bekommen.",
+"Ärger über einen Fehler kostet mehr Punkte als der Fehler selbst. Ein Satz wie „abhaken, weiter“ hilft, sofort wieder bei der Sache zu sein."
+],
+[
+"Technik",
+"Bajada an der Seitenwand",
+"Kommt ein Lob über die Seitenwand zurück, kann man ihn im Herunterkommen offensiv als Bajada spielen.",
+"Der Ball kommt nach dem Lob über die Seitenwand meist langsam zurück. Dann hat man Zeit, ihn offensiv im Herunterfallen zu spielen."
+],
+[
+"Taktik",
+"Rückzug",
+"Wird man am Netz überlobbt, gemeinsam zurücklaufen und den Ball an der Wand verarbeiten – nicht einzeln hinterherhetzen.",
+"Wer einzeln zurückläuft, öffnet ein großes Loch. Gemeinsam zurück zur Grundlinie, dann gemeinsam wieder nach vorne."
+],
+[
+"Fitness",
+"Seitwärtsschritte",
+"Seitliche Nachstellschritte statt Kreuzschritte halten dich am Netz stabil und schnell bereit.",
+"Mit Seitwärtsschritten bleibt der Körper zum Netz ausgerichtet. So kannst du sofort in jede Richtung reagieren."
+],
+[
+"Ausrüstung",
+"Schläger lagern",
+"Schläger nicht im heißen oder eiskalten Auto liegen lassen – Temperaturschwankungen schaden dem Schaumkern.",
+"Hitze kann den Schaumkern beschädigen, Kälte macht ihn hart. Bewahre den Schläger am besten in der Schlägertasche und bei Zimmertemperatur auf."
+],
+[
+"Taktik",
+"Spiel über die Mitte",
+"Ein Ball durch die Mitte nach einem Lob überrascht die Gegner, die noch zurücklaufen.",
+"Nach einem Lob laufen beide Gegner zurück, die Mitte ist dann offen. Ein ruhiger Ball durch die Mitte bringt sie ins Laufen."
+],
+[
+"Technik",
+"Auge auf den Ball",
+"Gerade bei Bällen aus der Ecke den Ball nie aus den Augen lassen – Abprallwinkel sind sonst kaum zu lesen.",
+"Viele Fehler bei Wandbällen passieren, weil man auf die Wand statt auf den Ball schaut. Immer den Ball im Blick behalten."
+],
+[
+"Mental",
+"Fair Play",
+"Im Padel sagt man fragliche Bälle selbst an. Fair Play gehört zur Kultur des Sports.",
+"Ehrlichkeit macht die Runde angenehm für alle. Wer sich unsicher ist, ob der Ball gut war, entscheidet im Zweifel für den Gegner."
+],
+[
+"Taktik",
+"Sicherer Smash",
+"Sicherer als ein harter Smash ist oft ein platzierter Smash auf die Füße – der kommt schwerer zurück.",
+"Ein platzierter Smash zu den Füßen ist schwer zu returnieren. Ein harter Smash auf die Wand prallt dagegen oft zurück und gibt dem Gegner eine Chance."
+],
+[
+"Technik",
+"Aufschlag-Wurf",
+"Den Ball beim Aufschlag ruhig fallen lassen statt werfen – das macht den Aufschlag gleichmäßiger.",
+"Ein ruhig fallen gelassener Ball springt immer gleich hoch auf. Das macht den Aufschlag reproduzierbar und reduziert Doppelfehler."
+],
+[
+"Fitness",
+"Regeneration",
+"Nach intensiven Spieltagen einen Tag Pause für Schultern und Ellbogen einplanen.",
+"Schulter und Ellbogen brauchen Zeit zur Erholung. Wer zweimal pro Woche spielt, sollte dazwischen eine Pause einplanen."
+],
+[
+"Mental",
+"Zielsetzung",
+"Setzt euch pro Spieltag ein kleines Ziel, etwa „mehr Lobs“ oder „weniger Smash-Fehler“ – so wird man messbar besser.",
+"Kleine, klare Ziele machen Fortschritt sichtbar. Nach dem Spieltag kurz reflektieren: Was hat geklappt, was nicht?"
+],
+[
+"Taktik",
+"Seitenwechsel nutzen",
+"Beim Seitenwechsel kurz absprechen, was funktioniert hat – zehn Sekunden Taktik bringen oft das nächste Spiel.",
+"Ein kurzer Satz reicht, etwa „Mehr Lobs auf den Linken“ oder „Mitte zumachen“. So passt ihr euch dem Gegner an."
+],
+[
+"Technik",
+"Vorhand-Volley",
+"Beim Vorhand-Volley den Schläger leicht öffnen und unter den Ball fahren – das gibt Kontrolle und Tiefe.",
+"Ein offener Schläger und ein kurzer Schlag unter den Ball lassen den Volley tief ins Feld fliegen. Das gibt euch Zeit am Netz."
+]
+];
+let TIP_ORDER = null;
+function tipCard(){
+  const day = Math.floor((Date.UTC(...today().split("-").map((v,i)=>i===1?v-1:+v)) - Date.UTC(2026,10,15)) / 86400000);
+  const N = PADEL_TIPS.length; const i = ((day % N) + N) % N;
+  // feste, gemischte Reihenfolge: jeder Tipp genau einmal, bevor sich etwas wiederholt
+  const order = TIP_ORDER || (TIP_ORDER = (() => { const a = PADEL_TIPS.map((_,k)=>k); let x = 20261115; for(let k=a.length-1;k>0;k--){ x = (x*1103515245+12345) % 2147483648; const j = x % (k+1); [a[k],a[j]] = [a[j],a[k]]; } return a; })());
+  const [cat, title, text, more] = PADEL_TIPS[order[i]];
+  return `<section class="card tip"><div class="tip-h"><span class="tip-k">Padel-Tipp des Tages</span><span class="tip-c">${esc(cat)}</span></div>
+    <div class="tip-t">${esc(title)}</div><p class="tip-x">${esc(text)}</p>${more ? `<div class="tip-m"><span>So geht's</span><p>${esc(more)}</p></div>` : ""}<div class="tip-n">Tipp ${i+1} von ${N} · morgen gibt's den nächsten</div></section>`;
+}
 function funCard(){
   if(!S.config) return "";
   const ns = nextSession(); if(!ns || ns.key !== today()) return "";
