@@ -939,7 +939,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-15.3";
+const APP_VERSION = "2026-11-15.4";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1018,7 +1018,8 @@ function mdNumbers(){
   const map = {}; [...S.matchdays].sort(byDate).forEach((m,i)=>map[m.id]=i+1); return map;
 }
 const minPct = () => { const v = S.config?.minPct; return v==null || v==="" ? 50 : Math.max(0, Math.min(100, num(v))); };
-const playedDays = () => S.matchdays.filter(md => (md.matches||[]).some(m => result(m).played)).length;
+/* Spieltage außerhalb des Abos zählen für die Mindestteilnahme nur als Bonus: nicht im Nenner, aber als Teilnahme */
+const playedDays = () => S.matchdays.filter(md => !md.outside && (md.matches||[]).some(m => result(m).played)).length;
 const minDays = () => Math.ceil(playedDays() * minPct() / 100);
 /* Einzelwertung eines Spieltags: Siege, dann Spieldifferenz */
 function dayRanking(md){
@@ -2819,7 +2820,7 @@ function viewTableFull(){
     <div class="tablewrap"><table>
       <thead><tr><th class="l">#</th><th class="l">Spieler</th><th class="hide-m" title="Spieltage dabei">Tage</th><th class="hide-m" title="Matches">Sp</th><th class="hide-m" title="Siege">S</th><th class="hide-m" title="Niederlagen">N</th><th title="Siege geteilt durch Matches">Quote</th><th title="Spieldifferenz pro Match">± / Sp</th><th class="hide-m" title="Spiele gewonnen : verloren">Spiele</th><th class="hide-m" title="Tagessiege">Tagessiege</th><th class="l hide-m">Form</th><th></th></tr></thead>
       <tbody>${rows}</tbody></table></div>
-    <p class="note">Jeder wird einzeln gewertet, egal mit wem er zusammen gespielt hat. Sortiert wird nach Siegquote, bei Gleichstand nach Spieldifferenz pro Match. In die Wertung kommt, wer bei mindestens ${minPct()} % der Spieltage dabei war (aktuell ${need}).</p>
+    <p class="note">Jeder wird einzeln gewertet, egal mit wem er zusammen gespielt hat. Sortiert wird nach Siegquote, bei Gleichstand nach Spieldifferenz pro Match. In die Wertung kommt, wer bei mindestens ${minPct()} % der Spieltage dabei war (aktuell ${need}). Spieltage außerhalb des Abos zählen voll für Ergebnisse und Elo, bei der Mindestteilnahme nur als Bonus. Matches mit einem neuen Gast (unter 5 Spielen) zählen für die Elo-Wertung halb.</p>
   </section>
   ${eloCard()}
   ${guestTable()}
@@ -3220,7 +3221,7 @@ function viewCash(){
    K = 32, deutliche Ergebnisse zählen bis zu 50 % mehr. Beide Spieler eines Teams bekommen dieselbe Änderung. */
 const ELO_START = 1000;
 function elo(){
-  const R = {}, peak = {}, hist = {};
+  const R = {}, peak = {}, hist = {}, gN = {};
   const get = id => (R[id] ??= ELO_START);
   for(const md of [...S.matchdays].sort(byDate)){
     let any = false;
@@ -3229,7 +3230,10 @@ function elo(){
       const a = (m.a||[]).filter(Boolean), b = (m.b||[]).filter(Boolean); if(a.length!==2 || b.length!==2) continue;
       const ra = (get(a[0])+get(a[1]))/2, rb = (get(b[0])+get(b[1]))/2;
       const E = 1/(1+Math.pow(10,(rb-ra)/400)); const Sa = r.w==="a" ? 1 : r.w==="b" ? 0 : .5;
-      const k = 32*(1 + Math.min(Math.abs(r.ga-r.gb),6)/12); const d = k*(Sa-E);
+      // Matches mit einem neuen Gast (weniger als 5 Spiele) zählen nur halb, bis seine Wertung verlässlich ist
+      const newGuest = [...a,...b].some(id => isGuest(id) && (gN[id]||0) < 5);
+      const k = 32*(1 + Math.min(Math.abs(r.ga-r.gb),6)/12) * (newGuest ? 0.5 : 1); const d = k*(Sa-E);
+      [...a,...b].forEach(id => { if(isGuest(id)) gN[id] = (gN[id]||0) + 1; });
       a.forEach(id => R[id] += d); b.forEach(id => R[id] -= d);
       [...a,...b].forEach(id => peak[id] = Math.max(peak[id] ?? ELO_START, R[id]));
       any = true;
