@@ -1,11 +1,12 @@
 <!DOCTYPE html>
-<html data-theme="light" lang="de">
+<html lang="de">
 <head>
-<meta name="color-scheme" content="light only">
+<meta name="color-scheme" content="light dark">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Padel-Masters</title>
-<meta name="theme-color" content="#FFFFFF">
+<meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D121C" media="(prefers-color-scheme: dark)">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Padel-Masters">
@@ -890,6 +891,59 @@ input[type=date],input[type=time]{width:100%;display:block;min-height:44px}
 
 .tip-m{margin-top:10px;padding:10px 12px;background:rgba(255,255,255,.10);border-radius:10px;margin-right:46px}.tip-m span{font-size:10.5px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--cline,#EEE3AE)}.tip-m p{margin:4px 0 0;font-size:13.5px;line-height:1.5;color:rgba(255,255,255,.88)}
 
+/* ===== Dunkelmodus: Padel Premium bei Nacht ===== */
+@media (prefers-color-scheme: dark){
+:root{--bg:#0D121C;--surface:#151C29;--surface-2:#1C2535;--ink:#ECEFF5;--ink-2:#C5CBD8;--muted:#929BAD;--line:#263044;
+ --court:#5B86EE;--court-dk:#2F5BC9;--court-lt:#1E2C4D;--cline:#E9DFA6;--optic:#D7E35E;--frame:#0A0E16;
+ --good:#55C995;--good-bg:#173126;--bad:#F2877B;--bad-bg:#3A1D1C;--info-bg:#1E2C4D;--primary:#ECEFF5;color-scheme:dark}
+body{background:#0D121C !important;color:var(--ink)}
+body::before{opacity:.5 !important;background:
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 200' preserveAspectRatio='none'%3E%3Cg fill='none' stroke='%235B86EE' stroke-opacity='.28' stroke-width='0.9' vector-effect='non-scaling-stroke'%3E%3Crect x='6' y='4' width='88' height='192' stroke-width='1.6' vector-effect='non-scaling-stroke'/%3E%3Cline x1='6' y1='100' x2='94' y2='100' stroke-width='2.4' vector-effect='non-scaling-stroke'/%3E%3Cline x1='6' y1='52' x2='94' y2='52'/%3E%3Cline x1='6' y1='148' x2='94' y2='148'/%3E%3Cline x1='50' y1='52' x2='50' y2='148'/%3E%3C/g%3E%3C/svg%3E") center/100% 100% no-repeat,
+  radial-gradient(120% 80% at 50% 0%,#121A2A 0%,#0E1420 60%,#0B1018 100%) !important}
+.appbar{background:rgba(13,18,28,.92) !important;border-bottom-color:var(--line) !important}
+.brand h1{color:var(--ink) !important}
+.cd{background:var(--surface-2) !important;border-color:var(--line) !important;color:var(--ink) !important}.cd .cd-v{color:var(--ink) !important}.cd .cd-l{color:var(--muted) !important}
+.card,.sheet-head,.sheet-foot{background:var(--surface) !important;border-color:var(--line) !important;color:var(--ink)}
+.sheet,.sheet-body{background:var(--bg) !important}
+.h-f,.cp-row,.door,.v2-tabs,.seg,.rc-a,.tk-tile,.kpi,.fact,.slot,.chip,.pin-cur{background:var(--surface-2) !important;border-color:var(--line) !important;color:var(--ink)}
+.input,input,select,textarea{background:var(--surface-2) !important;color:var(--ink) !important;border-color:var(--line) !important}
+.input::placeholder{color:var(--muted) !important}
+.btn:not(.primary):not(.ghost){background:var(--surface-2) !important;border-color:var(--line) !important;color:var(--ink) !important}
+.btn.primary{background:#2F5BC9 !important;border-color:#2F5BC9 !important;color:#fff !important}
+.btn.ghost{color:var(--court) !important}
+.chip[aria-pressed="true"],.vbtn[aria-pressed="true"]{background:#2F5BC9 !important;border-color:#2F5BC9 !important;color:#fff !important}
+.vbtn{background:var(--surface-2) !important;border-color:var(--line) !important;color:var(--ink) !important}
+.v2-sec>span:first-child,.h-sec,.cp-h,.lbl,.h-tt,.tk-k,.v2-al{color:var(--court) !important}
+.h-f em,.tk-who,.v2-pq b,.sv-k{color:#8FB0FF !important}
+.h-ic{background:var(--court-lt) !important;color:#8FB0FF !important}
+.v2-tabs button,.seg button{color:var(--muted) !important}
+.v2-tabs button.on,.seg button.on{color:var(--ink) !important;box-shadow:inset 0 -2px 0 var(--court) !important;background:transparent !important}
+.pill.info,.pill.neutral{background:var(--court-lt) !important;color:#9DB8FF !important}
+.pill.good{background:var(--good-bg) !important;color:var(--good) !important}.pill.bad{background:var(--bad-bg) !important;color:var(--bad) !important}
+.pill.warn{background:#3A3016 !important;color:#F0CF6A !important}
+.notice{background:var(--surface-2) !important;color:var(--ink-2) !important}
+.v2-acc{background:linear-gradient(160deg,#1A2233 0%,#121826 70%) !important;border:1px solid var(--line) !important}
+.ticket{border:1px solid var(--line) !important}
+.avatar{box-shadow:0 0 0 2px var(--surface),0 0 0 3px rgba(91,134,238,.5) !important}
+.rank{color:var(--muted) !important;border-color:var(--line) !important}
+.fd.N{background:#4A5366 !important}.fd.U{background:#6B7488 !important}.fd.S{background:var(--court) !important}
+.sv-o{background:var(--surface-2) !important;border-color:var(--line) !important}.sv-bar{background:var(--court-lt) !important}.sv-o.lead .sv-bar{background:#2C3A1C !important}
+.sv-t,.sv-n,.sv-q{color:var(--ink) !important}
+.c1-s,.rc-s,.score{background:var(--surface-2) !important;color:var(--ink) !important;border-color:var(--line) !important}
+.tip-m{background:rgba(255,255,255,.08) !important}
+.v2-next{border-color:var(--court) !important}
+.datebox{background:var(--surface-2) !important;color:var(--ink) !important;border-color:var(--line) !important}
+.v2-d span,.datebox span{color:var(--muted) !important}
+table th{color:var(--muted) !important}table td{border-color:var(--line) !important}
+.divrow td{background:var(--surface-2) !important;color:var(--muted) !important}
+.acc-ico{background:var(--surface-2) !important}.acc-ico svg{color:var(--ink-2) !important}
+.overlay{background:rgba(0,0,0,.6) !important}
+.pin-b{background:var(--surface) !important;border-color:#2F6FB8 !important}
+.h-todo{border-left-color:var(--court) !important}
+.cp-row .cp-t,.cp-t b{color:var(--ink-2) !important}
+.recap .rc-mast{background:#0A0E16 !important}
+}
+
 </style>
 </head>
 <body>
@@ -939,7 +993,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-15.5";
+const APP_VERSION = "2026-11-16.1";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
