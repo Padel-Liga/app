@@ -960,6 +960,15 @@ table th{color:var(--muted) !important}table td{border-color:var(--line) !import
 .ps-rm{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;cursor:pointer}
 @media (prefers-color-scheme: dark){.ps-like{background:var(--surface-2) !important}.ps-like.on{background:rgba(224,67,91,.15) !important;color:#FF7A8C !important}}
 
+.ticket .tk-head{flex-wrap:wrap;row-gap:12px}
+.tk-door{flex:1 1 100%;display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.18);border:1px solid rgba(238,227,174,.45);border-radius:10px;padding:8px 12px;color:#fff;font:600 13px var(--font);margin-bottom:6px}
+.tk-door svg{color:var(--optic,#D3E05B);flex:none}
+.tk-door span{opacity:.85}
+.tk-door b{font-size:22px;font-weight:800;letter-spacing:.12em;color:var(--optic,#D3E05B);margin-left:auto;font-variant-numeric:tabular-nums}
+.tk-door.ask{cursor:pointer;justify-content:center;background:var(--optic,#D3E05B);border-color:transparent;color:#22280A}.tk-door.ask svg{color:#22280A}.tk-door.ask span{opacity:1}
+.tk-door.none span{opacity:.7}
+.tk-dedit{border:0;background:none;color:rgba(255,255,255,.7);font:600 12px var(--font);text-decoration:underline;cursor:pointer;padding:0 0 0 6px}
+
 </style>
 </head>
 <body>
@@ -1009,7 +1018,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-17.1";
+const APP_VERSION = "2026-11-17.2";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -2870,6 +2879,14 @@ async function postImgLoad(file){
   } catch(e){ toast("Das Bild konnte nicht gelesen werden."); }
   if(S.draft===d){ d.busy = false; renderModal(); }
 }
+/* Türcode im Kopf der Matchday-Karte */
+function tkDoor(key){
+  const dc = S.doorcodes[key]; const can = canDoorCode();
+  const ic = `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="15.5" r="4.5"/><path d="M10.7 12.3 20 3M16 7l3 3"/></svg>`;
+  if(dc?.code) return `<div class="tk-door">${ic}<span>Türcode</span><b>${esc(dc.code)}</b>${can ? `<button class="tk-dedit" data-act="door-edit" data-key="${esc(key)}">ändern</button>` : ""}</div>`;
+  return can ? `<button class="tk-door ask" data-act="door-edit" data-key="${esc(key)}">${ic}<span>Türcode eintragen</span></button>`
+             : `<div class="tk-door none">${ic}<span>Türcode folgt</span></div>`;
+}
 function funCard(){
   if(!S.config) return "";
   const ns = nextSession(); if(!ns || ns.key !== today()) return "";
@@ -2880,11 +2897,12 @@ function funCard(){
   const nums = mdNumbers(); const n = md ? nums[md.id] : Object.keys(nums).length + 1;
   return `<section class="card ticket">
     <div class="tk-head"><div><div class="tk-k">${ns.live ? "Läuft gerade" : "Heute"} · Spieltag ${n}</div><div class="tk-big">Matchday</div></div>
-      <div class="tk-time"><b>${sched().start}</b><span>${ns.live ? "bis " + sched().end : countdownText(ns)}</span></div></div>
+      <div class="tk-time"><b>${sched().start}</b><span>${ns.live ? "bis " + sched().end : countdownText(ns)}</span></div>
+      ${tkDoor(ns.key)}</div>
     <div class="tk-perf"></div>
     <div class="tk-line">${play.slice(0,4).map(id => `<div>${avatar(id)}<span>${esc(pname(id))}</span></div>`).join("")}</div>
     ${tiles.length ? `<div class="h-sec">Fakten</div><div class="h-facts">${tiles.map(t => `<div class="h-f"><b>${t.n}</b><span>${t.u}</span><em>${t.who}</em></div>`).join("")}</div>` : ""}
-    <div class="h-bot">${doorCode(ns.key)}${cpToggle(ns.key, play.slice(0,4))}</div>
+    <div class="h-bot">${cpToggle(ns.key, play.slice(0,4))}</div>
     ${S.cpOpen ? carpool(ns.key, play.slice(0,4)) : ""}
   </section>`;
 }
