@@ -976,6 +976,15 @@ body::after{content:"";position:fixed;left:50%;top:52%;width:min(78vw,420px);asp
   background:url("logo-white-bg.png") center/contain no-repeat;opacity:.55;filter:drop-shadow(0 0 1px rgba(31,81,198,.25))}
 @media (prefers-color-scheme: dark){body::after{opacity:.06;filter:none}}
 
+.tip-v{margin:10px 0 0;border-radius:12px;overflow:hidden;position:relative;aspect-ratio:16/9;background:#0B1B45;display:block;border:0;padding:0;width:calc(100% - 46px);cursor:pointer}
+.tip-v img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.tip-v .th{position:absolute;inset:0;display:grid;place-items:center;background:linear-gradient(180deg,rgba(0,0,0,0) 40%,rgba(0,0,0,.65))}
+.tip-v .th svg{width:58px;height:58px}
+.tip-v .cap{position:absolute;left:10px;right:10px;bottom:8px;text-align:left;color:#fff;font:700 13px var(--font);text-shadow:0 1px 4px rgba(0,0,0,.6)}
+.tip-v .cap small{display:block;font-weight:600;font-size:11px;opacity:.85}
+.tip-v iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.tip-yt{display:inline-flex;margin-top:8px;color:var(--cline,#EEE3AE);font:600 12.5px var(--font);text-decoration:underline}
+
 </style>
 </head>
 <body>
@@ -1025,7 +1034,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-17.3";
+const APP_VERSION = "2026-11-17.4";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -2826,7 +2835,16 @@ const PADEL_TIPS = [
 "Ein offener Schläger und ein kurzer Schlag unter den Ball lassen den Volley tief ins Feld fliegen. Das gibt euch Zeit am Netz."
 ]
 ];
+const TIP_VIDEOS = {"Bandeja": {"id": "4ccz6ABNTGU", "t": "Braucht die Bandeja Spin?"}, "Bandeja-Ziel": {"id": "pOnoFNb5Fz8", "t": "Die „Bela-Bandeja“"}, "Linke Seite": {"id": "fM9ud3sRD6k", "t": "Bandeja von rechts vs. links"}, "Vibora": {"id": "MfoScLd0U34", "t": "Die Víbora auf jedem Level"}, "Netzposition": {"id": "jODeGp42Jc8", "t": "Wie gewinnt man mehr Punkte?"}, "Aufschlag": {"id": "zSTsLQQDhMw", "t": "Aufschlagen wie die Profis"}, "Zwei Aufschläge": {"id": "zSTsLQQDhMw", "t": "Aufschlagen wie die Profis"}, "Return": {"id": "JvWXTPI2dLY", "t": "Leichte Aufschläge ausnutzen"}, "Griff": {"id": "TWm6-OrF8mA", "t": "Rückhandgriff korrigieren"}, "Volley": {"id": "p6SwYJQ5AYY", "t": "Vorhand-Volley-Technik"}, "Vorhand-Volley": {"id": "p6SwYJQ5AYY", "t": "Vorhand-Volley-Technik"}, "Erster Volley": {"id": "qYtekNQHlOg", "t": "Der Setup-Volley"}, "Defensive Volley": {"id": "85rBAI7epkw", "t": "Block-Volley"}, "Rückhand": {"id": "jRkQB25IGPw", "t": "Rückhand-Volley"}, "Glaswand": {"id": "ktasv2cpJHk", "t": "Spielen mit der Rückwand"}, "Gerade Rückwand": {"id": "ktasv2cpJHk", "t": "Spielen mit der Rückwand"}, "Seitenwand": {"id": "dzORYMuemZo", "t": "Bälle aus der Ecke (Doppelglas)"}, "Zweite Wand": {"id": "dzORYMuemZo", "t": "Bälle aus der Ecke (Doppelglas)"}, "Defensive Wand": {"id": "4qmfYTpD7WU", "t": "Rückhand nach der Glaswand"}, "Bajada": {"id": "itDDpXIWlYc", "t": "Rückhand-Bajada nach dem Lob"}, "Smash": {"id": "dBiK0Qf4ERk", "t": "Häufige Fehler beim Smash"}, "Sicherer Smash": {"id": "Ahn5nfXNXb4", "t": "Der Fake-Smash"}, "Langsam spielen": {"id": "ouq7A_MVzpg", "t": "Tipps gegen bessere Spieler"}, "Nicht alles angreifen": {"id": "x5z6hovVros", "t": "Taktik gegen Lobspieler"}};
 let TIP_ORDER = null;
+function tipVideo(title){
+  const v = TIP_VIDEOS[title]; if(!v) return "";
+  const yt = `https://www.youtube.com/watch?v=${v.id}`;
+  const player = S.tipPlay===v.id
+    ? `<div class="tip-v"><iframe src="https://www.youtube-nocookie.com/embed/${v.id}?autoplay=1&playsinline=1&rel=0&modestbranding=1" title="${esc(v.t)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`
+    : `<button class="tip-v" data-act="tip-play" data-id="${esc(v.id)}" aria-label="Video abspielen: ${esc(v.t)}"><img src="https://i.ytimg.com/vi/${v.id}/hqdefault.jpg" alt="" loading="lazy"><div class="th"><svg viewBox="0 0 68 48" aria-hidden="true"><path d="M66.5 7.7a8.5 8.5 0 0 0-6-6C55.2.4 34 .4 34 .4S12.8.4 7.5 1.7a8.5 8.5 0 0 0-6 6C.2 13 .2 24 .2 24s0 11 1.3 16.3a8.5 8.5 0 0 0 6 6C12.8 47.6 34 47.6 34 47.6s21.2 0 26.5-1.3a8.5 8.5 0 0 0 6-6C67.8 35 67.8 24 67.8 24s0-11-1.3-16.3z" fill="#f00"/><path d="M45 24 27 14v20z" fill="#fff"/></svg></div><div class="cap">${esc(v.t)}<small>The Padel School · Englisch</small></div></button>`;
+  return player + `<a class="tip-yt" href="${yt}" target="_blank" rel="noopener">In YouTube öffnen ›</a>`;
+}
 function tipCard(){
   const day = Math.floor((Date.UTC(...today().split("-").map((v,i)=>i===1?v-1:+v)) - Date.UTC(2026,10,15)) / 86400000);
   const N = PADEL_TIPS.length; const i = ((day % N) + N) % N;
@@ -2834,7 +2852,7 @@ function tipCard(){
   const order = TIP_ORDER || (TIP_ORDER = (() => { const a = PADEL_TIPS.map((_,k)=>k); let x = 20261115; for(let k=a.length-1;k>0;k--){ x = (x*1103515245+12345) % 2147483648; const j = x % (k+1); [a[k],a[j]] = [a[j],a[k]]; } return a; })());
   const [cat, title, text, more] = PADEL_TIPS[order[i]];
   return `<section class="card tip"><div class="tip-h"><span class="tip-k">Padel-Tipp des Tages</span><span class="tip-c">${esc(cat)}</span></div>
-    <div class="tip-t">${esc(title)}</div><p class="tip-x">${esc(text)}</p>${more ? `<div class="tip-m"><span>So geht's</span><p>${esc(more)}</p></div>` : ""}</section>`;
+    <div class="tip-t">${esc(title)}</div><p class="tip-x">${esc(text)}</p>${more ? `<div class="tip-m"><span>So geht's</span><p>${esc(more)}</p></div>` : ""}${tipVideo(title)}</section>`;
 }
 /* ---------- Posts: Text und/oder Bild, 24 Stunden sichtbar, mit Likes ---------- */
 const POST_TTL = 24*3600000;
@@ -4107,6 +4125,7 @@ document.addEventListener("click", e => {
       const p = S.posts.find(x => x.id===id); const me = getMe(); if(!p || !(p.by===me || isAdmin())) break;
       if(S.armed!=="post:"+id){ S.armed = "post:"+id; render(); break; }
       S.armed = null; guarded(async () => { const ok = await write(() => S.db.collection("posts").doc(id).delete()); if(ok) toast("Post gelöscht"); }); break; }
+    case "tip-play": S.tipPlay = id; render(); break;
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
