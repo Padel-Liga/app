@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="Padel-Masters">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -969,13 +969,20 @@ table th{color:var(--muted) !important}table td{border-color:var(--line) !import
 .tk-door.none span{opacity:.7}
 .tk-dedit{border:0;background:none;color:rgba(255,255,255,.7);font:600 12px var(--font);text-decoration:underline;cursor:pointer;padding:0 0 0 6px}
 
+/* ===== Padel-Logo ===== */
+.logo{width:40px !important;height:40px !important;border-radius:50% !important;background:radial-gradient(130% 130% at 30% 20%,#2C62DA,#173E9A) !important;display:grid;place-items:center;overflow:hidden;flex:none}
+.logo img{width:82%;height:82%;object-fit:contain;display:block}
+body::after{content:"";position:fixed;left:50%;top:52%;width:min(78vw,420px);aspect-ratio:1;transform:translate(-50%,-50%);z-index:-1;pointer-events:none;
+  background:url("logo-white-bg.png") center/contain no-repeat;opacity:.55;filter:drop-shadow(0 0 1px rgba(31,81,198,.25))}
+@media (prefers-color-scheme: dark){body::after{opacity:.06;filter:none}}
+
 </style>
 </head>
 <body>
 <header class="appbar">
   <div class="appbar-inner">
     <div class="brand">
-      <div class="logo" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#d9f24b"/><path d="M5.2 5.2a10 10 0 0 1 0 13.6M18.8 5.2a10 10 0 0 0 0 13.6" fill="none" stroke="#fff" stroke-width="1.8"/></svg></div>
+      <div class="logo" aria-hidden="true"><img src="logo-white.png" alt=""></div>
       <div style="min-width:0">
         <h1 id="leagueName">Padel-Masters</h1>
         <button class="hdr-poll" id="hdrPoll" data-act="hdr-poll" hidden></button>
@@ -1018,7 +1025,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-17.2";
+const APP_VERSION = "2026-11-17.3";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);

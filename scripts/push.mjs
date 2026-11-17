@@ -234,7 +234,7 @@ for(const msg of outbox){
     const res = await admin.messaging().sendEachForMulticast({
       tokens,
       notification: { title: msg.title, body: msg.body },
-      webpush: { notification: { icon: APP_URL + "icon-192.png", badge: APP_URL + "icon-192.png" }, fcmOptions: { link: APP_URL } }
+      webpush: { notification: { icon: APP_URL + "icon-192.png?v=2", badge: APP_URL + "icon-192.png?v=2" }, fcmOptions: { link: APP_URL } }
     });
     res.responses.forEach((r, i) => {
       if(r.success) { sentCount++; return; }
