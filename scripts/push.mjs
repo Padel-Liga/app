@@ -55,7 +55,7 @@ async function all(coll){ const q = await db.collection(`${base}/${coll}`).get()
 const cfgSnap = await db.doc(`${base}/league/config`).get();
 if(!cfgSnap.exists){ console.log("Keine Liga-Konfiguration."); process.exit(0); }
 const cfg = cfgSnap.data();
-const [members, votes, matchdays, ledger, requests, results, broadcasts, surveys, comments, pinpays] = await Promise.all(["members","votes","matchdays","ledger","requests","results","broadcasts","surveys","comments","pinpays"].map(all));
+const [members, votes, matchdays, ledger, requests, results, broadcasts, surveys, comments, pinpays, posts] = await Promise.all(["members","votes","matchdays","ledger","requests","results","broadcasts","surveys","comments","pinpays","posts"].map(all));
 const resById = Object.fromEntries(results.map(r => [r.id, r]));
 const stateRef = db.doc(`${base}/system/push`);
 const state = (await stateRef.get()).data() || {};
@@ -217,6 +217,9 @@ if(cfg.pin && cfg.pin.url){
   for(const x of pinpays.filter(x => x.pin===key && x.status==="paid"))
     queue(`pinpay:${x.id}`, `💶 ${cfg.pin.title || "Zahlung"}`, `${pname(x.pid)} hat bezahlt. Bitte prüfen und bestätigen.`, forType("confirm", m => m.pid===owner));
 }
+// Neue Posts (an alle außer dem Verfasser)
+for(const p of posts.filter(p => Date.now() - (p.at||0) < 3600000))
+  queue(`post:${p.id}`, `📝 ${pname(p.by)} hat etwas gepostet`, (p.text ? String(p.text).slice(0,140) : "") + (p.img ? (p.text ? " 📷" : "📷 Neues Foto") : ""), forType("post", m => m.pid !== p.by));
 // Test-Nachrichten
 const tests = members.filter(m => m.pushTest && m.pushToken && m.active !== false);
 for(const m of tests) outbox.push({key:null, title:"🔔 Test", body:"Push-Benachrichtigungen funktionieren!", to:[m], test:true});

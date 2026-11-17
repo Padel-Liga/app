@@ -944,6 +944,22 @@ table th{color:var(--muted) !important}table td{border-color:var(--line) !import
 .recap .rc-mast{background:#0A0E16 !important}
 }
 
+.ps-head{display:flex;justify-content:space-between;align-items:center;margin:4px 4px 8px}.ps-head>span{font-size:10.5px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--court,#1F51C6)}
+.ps{padding:14px !important;display:grid;gap:10px}
+.ps-top{display:flex;align-items:center;gap:10px}.ps-top .avatar{width:36px;height:36px}
+.ps-who{flex:1;display:grid;line-height:1.25;min-width:0}.ps-who b{font-size:14.5px}.ps-who span{font-size:12px;color:var(--muted)}
+.ps-x{border:0;background:none;color:var(--muted);font:600 13px var(--font);cursor:pointer;padding:4px}.ps-x.armed{color:var(--bad)}
+.ps-t{margin:0;font-size:15px;line-height:1.5;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}
+.ps-img{width:100%;max-height:420px;object-fit:cover;border-radius:10px;display:block}
+.ps-bot{display:flex;align-items:center;gap:12px;border-top:1px solid var(--line);padding-top:10px}
+.ps-like{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:5px 12px;font:700 14px var(--font);color:var(--ink-2);cursor:pointer;flex:none}
+.ps-like.on{color:#E0435B;border-color:rgba(224,67,91,.35);background:rgba(224,67,91,.08)}
+.ps-lk{display:flex;align-items:center;min-width:0}.ps-lk .avatar{width:20px;height:20px;font-size:8px}
+.ps-ln{font-size:12px;color:var(--muted);margin-left:8px;overflow-wrap:anywhere}
+.ps-prev{position:relative}.ps-prev img{width:100%;max-height:260px;object-fit:cover;border-radius:10px;display:block}
+.ps-rm{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:50%;border:0;background:rgba(0,0,0,.55);color:#fff;cursor:pointer}
+@media (prefers-color-scheme: dark){.ps-like{background:var(--surface-2) !important}.ps-like.on{background:rgba(224,67,91,.15) !important;color:#FF7A8C !important}}
+
 </style>
 </head>
 <body>
@@ -993,7 +1009,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-16.1";
+const APP_VERSION = "2026-11-17.1";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1023,7 +1039,7 @@ async function importAll(obj){
   await b.commit(); return n;
 }
 
-const S = { broadcasts:[], votes:[], rides:[], doorcodes:{}, avatars:{}, comments:[], pinpays:[], cmOpen:new Set(), surveys:[], svotes:[], tsub:"me", mdRaw:[], results:{},
+const S = { posts:[], broadcasts:[], votes:[], rides:[], doorcodes:{}, avatars:{}, comments:[], pinpays:[], cmOpen:new Set(), surveys:[], svotes:[], tsub:"me", mdRaw:[], results:{},
   db:null, noDb:false, authUser:null, authChecked:false, denied:false, unsubs:[], readOnly:false, slow:false,
   config:null, matchdays:[], ledger:[],
   loaded:{config:false, md:false, lg:false},
@@ -1709,7 +1725,7 @@ function viewHome(){
   const full = (() => { const ns = nextSession(); return ns && pollFor(ns.key).play.length >= 4; })();
   const fc = funCard();
   // ohne Spieltag: Padel-Tipp des Tages; steht das Spiel, darf er über der (kompakten) Abstimmung stehen
-  return broadcastCards() + (fc ? pollCard() : full ? tipCard() + pollCard() : tipCard()) + mini;
+  return postsBlock() + broadcastCards() + (fc ? pollCard() : full ? tipCard() + pollCard() : tipCard()) + mini;
 }
 /* ---------- Spieltag-Karte (Ticket mit Statistik-Kacheln) ---------- */
 function funTiles(key, play){
@@ -2094,7 +2110,7 @@ const M = {
 };
 const RE = /(\p{Extended_Pictographic}️?(‍\p{Extended_Pictographic}️?)*|[\u{1F3FB}-\u{1F3FF}])/gu;
 return function clean(root){
-  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); const nodes=[]; while(w.nextNode()){ RE.lastIndex=0; if(RE.test(w.currentNode.nodeValue)) nodes.push(w.currentNode); }
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT); const nodes=[]; while(w.nextNode()){ RE.lastIndex=0; if(RE.test(w.currentNode.nodeValue) && !w.currentNode.parentElement?.closest(".ps-t,.cm-t,.sv-q,.sv-t,.sv-bt,.input")) nodes.push(w.currentNode); }
   for(const n of nodes){ RE.lastIndex=0; const html = n.nodeValue.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])).replace(RE, m => M[m] || M[m.replace("️","")] || "").replace(/\s{2,}/g," ");
     const sp=document.createElement("span"); sp.innerHTML=html; n.replaceWith(...sp.childNodes); }
 }
@@ -2804,6 +2820,56 @@ function tipCard(){
   return `<section class="card tip"><div class="tip-h"><span class="tip-k">Padel-Tipp des Tages</span><span class="tip-c">${esc(cat)}</span></div>
     <div class="tip-t">${esc(title)}</div><p class="tip-x">${esc(text)}</p>${more ? `<div class="tip-m"><span>So geht's</span><p>${esc(more)}</p></div>` : ""}</section>`;
 }
+/* ---------- Posts: Text und/oder Bild, 24 Stunden sichtbar, mit Likes ---------- */
+const POST_TTL = 24*3600000;
+const livePosts = () => S.posts.filter(p => Date.now() - (p.at||0) < POST_TTL && (p.text || p.img)).sort((a,b) => (b.at||0) - (a.at||0));
+function postsBlock(){
+  if(!S.config) return "";
+  const me = getMe(); const L = livePosts();
+  const left = t => `noch ${Math.max(1, Math.ceil((t + POST_TTL - Date.now())/3600000))} Std`;
+  const ago = t => { const m = Math.max(0, Math.round((Date.now()-t)/60000)); return m < 1 ? "gerade eben" : m < 60 ? `vor ${m} Min` : `vor ${Math.round(m/60)} Std`; };
+  const heart = on => `<svg viewBox="0 0 24 24" width="20" height="20" fill="${on?"currentColor":"none"}" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-4.4-9.3-9A5.4 5.4 0 0 1 12 6.3 5.4 5.4 0 0 1 21.3 12C19 16.6 12 21 12 21z"/></svg>`;
+  const head = `<div class="ps-head"><span>Posts · 24 Stunden</span>${canWrite() && me ? `<button class="btn sm primary" data-act="post-new" id="btnPostNew">${ICON.plus}Neuer Post</button>` : ""}</div>`;
+  if(!L.length) return canWrite() && me ? head : "";
+  return head + L.map(p => { const likes = Array.isArray(p.likes) ? p.likes : []; const on = likes.includes(me);
+    const canDel = canWrite() && me && (p.by===me || isAdmin()); const armed = S.armed==="post:"+p.id;
+    const img = typeof p.img==="string" && p.img.startsWith("data:image/") ? p.img : "";
+    return `<section class="card ps" id="post-${esc(p.id)}">
+      <div class="ps-top">${avatar(p.by)}<div class="ps-who"><b>${esc(pname(p.by))}</b><span>${ago(p.at)} · ${left(p.at)}</span></div>
+        ${canDel ? `<button class="ps-x ${armed?"armed":""}" data-act="post-del" data-id="${esc(p.id)}" aria-label="Post löschen">${armed ? "Löschen?" : "✕"}</button>` : ""}</div>
+      ${p.text ? `<p class="ps-t">${esc(p.text)}</p>` : ""}
+      ${img ? `<img class="ps-img" src="${img}" alt="" loading="lazy" decoding="async">` : ""}
+      <div class="ps-bot"><button class="ps-like ${on?"on":""}" data-act="post-like" data-id="${esc(p.id)}" ${canWrite() && me ? "" : "disabled"} aria-pressed="${on}" aria-label="Gefällt mir">${heart(on)}<span>${likes.length}</span></button>
+        <span class="ps-lk">${likes.slice(0,4).map(id=>`<span class="sv-av">${avatar(id)}</span>`).join("")}<span class="ps-ln">${likes.length ? "gefällt " + likes.slice(0,2).map(id=>esc(pname(id))).join(", ") + (likes.length>2?` und ${likes.length-2} weiteren`:"") : ""}</span></span></div>
+    </section>`; }).join("");
+}
+function modalPost(){
+  const d = S.draft;
+  return { title:"Neuer Post", html:`
+    <div class="field"><label for="post-text">Was gibt's Neues?</label><textarea class="input" id="post-text" data-f="text" maxlength="500" style="min-height:110px;font-family:var(--font);font-size:16px" placeholder="Text schreiben …">${esc(d.text||"")}</textarea></div>
+    ${d.img ? `<div class="ps-prev"><img src="${d.img}" alt="Vorschau"><button class="ps-rm" data-act="post-img-rm" aria-label="Bild entfernen">✕</button></div>` : ""}
+    ${d.busy ? `<div class="muted small">Bild wird vorbereitet …</div>` : ""}
+    <div class="grid2"><label class="btn pp-pick">${d.img ? "Anderes Foto" : "Foto wählen"}<input type="file" accept="image/*" data-post-img="1"></label>
+      <label class="btn pp-pick">Kamera<input type="file" accept="image/*" capture="environment" data-post-img="1"></label></div>
+    <p class="note" style="margin:0">Der Post steht 24 Stunden oben auf der Startseite. Alle bekommen eine Push-Nachricht.</p>`,
+    foot:`<span></span><button class="btn primary" data-act="post-save" id="btnPostSave" ${d.busy?"disabled":""}>Posten</button>` };
+}
+async function postImgLoad(file){
+  const d = S.draft; if(!file || !d) return;
+  d.busy = true; renderModal();
+  try{
+    const url = URL.createObjectURL(file);
+    const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+    const max = 1080, sc = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth*sc); c.height = Math.round(img.naturalHeight*sc);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+    let q = .8, out = c.toDataURL("image/jpeg", q);
+    while(out.length > 700000 && q > .35){ q -= .1; out = c.toDataURL("image/jpeg", q); }
+    if(out.length > 850000){ const c2 = document.createElement("canvas"); c2.width = Math.round(c.width*.7); c2.height = Math.round(c.height*.7); c2.getContext("2d").drawImage(c,0,0,c2.width,c2.height); out = c2.toDataURL("image/jpeg", .6); }
+    if(S.draft===d){ d.text = $("post-text")?.value ?? d.text; d.img = out; }
+  } catch(e){ toast("Das Bild konnte nicht gelesen werden."); }
+  if(S.draft===d){ d.busy = false; renderModal(); }
+}
 function funCard(){
   if(!S.config) return "";
   const ns = nextSession(); if(!ns || ns.key !== today()) return "";
@@ -3049,6 +3115,7 @@ const PUSH_TYPES = [
   ["noon","🎾 Matchday-Fakten um 12 Uhr am Spieltag"],
   ["survey","📊 Neue Umfrage gestartet"],
   ["comment","💬 Neue Kommentare"],
+  ["post","📝 Neue Posts"],
   ["reminder","⏰ Erinnerung 1 Stunde vor dem Spiel"],
   ["missing","📝 Ergebnisse fehlen noch"],
   ["resconf","🎾 Ergebnis wartet auf meine Bestätigung"],
@@ -3555,7 +3622,7 @@ function closeModal(){ S.modal = null; S.draft = null; $("overlay").hidden = tru
 function renderModal(first){
   S._elo = null;
   const body = $("sheetBody"); const top = body.scrollTop;
-  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed, alerts:modalAlerts, res:modalRes, bc:modalBc, sv:modalSurvey, ppic:modalPic}[S.modal];
+  const fn = {md:modalMd, settings:modalSettings, pay:modalPay, cost:modalCost, imp:modalImport, tr:modalTransfer, player:modalPlayer, pguest:modalPollGuest, cmp:modalCompare, pp:modalPP, cal:modalCal, delled:modalDelLed, alerts:modalAlerts, res:modalRes, bc:modalBc, sv:modalSurvey, ppic:modalPic, post:modalPost}[S.modal];
   if(!fn) return;
   const {title, html, foot} = fn();
   $("sheetTitle").textContent = title; body.innerHTML = html; $("sheetFoot").innerHTML = foot;
@@ -3830,7 +3897,7 @@ document.addEventListener("click", e => {
   const el = e.target.closest("[data-act]"); if(!el || el.disabled) return;
   const a = el.dataset.act, id = el.dataset.id, d = S.draft;
   if(meGuest() && ["new-pay","new-cost","settle","pp-topup","cash-sub","acc","mark-paid","open-settings","cash-more","led-filter","led-all","del-led"].includes(a)) return;
-  if(a!=="del-led" && a!=="md-delete" && a!=="mem-del" && a!=="bc-del" && a!=="sv-del" && a!=="cm-del") S.armed = null;
+  if(a!=="del-led" && a!=="md-delete" && a!=="mem-del" && a!=="bc-del" && a!=="sv-del" && a!=="cm-del" && a!=="post-del") S.armed = null;
   switch(a){
     case "nav": if(el.dataset.view!=="kasse") S.cashSub = ""; S.view = el.dataset.view; if(el.dataset.tsub) S.tsub = el.dataset.tsub; if(el.dataset.mdOpen){ (S.mdOpen ||= new Set()).add(el.dataset.mdOpen); }
       history.replaceState(null,"","#"+S.view); render();
@@ -3999,6 +4066,22 @@ document.addEventListener("click", e => {
       guarded(async () => { const ok = await write(() => a==="pp-paid" ? ref.set({pin:key, pid:me, status:"paid", t:Date.now()})
           : a==="pp-undo" ? ref.delete() : ref.set({pin:key, pid:id, status:"confirmed", t:S.pinpays.find(x => x.pin===key && x.pid===id)?.t || Date.now(), confirmedAt:Date.now(), confirmedBy:me}));
         if(ok) toast(a==="pp-paid" ? `Gemeldet · ${pname(pin.by||ADMIN_PIDS[0])} bestätigt` : a==="pp-undo" ? "Zurückgenommen" : `${pname(id)} bestätigt`); }); break; }
+    case "post-new": if(getMe()) openModal("post", {text:"", img:null}); break;
+    case "post-img-rm": d.text = $("post-text")?.value ?? d.text; d.img = null; renderModal(); break;
+    case "post-save": {
+      const me = getMe(); if(!me) break; const text = ($("post-text")?.value ?? d.text ?? "").trim();
+      if(!text && !d.img){ toast("Bitte einen Text schreiben oder ein Foto wählen."); break; }
+      guarded(async () => { const ok = await write(() => S.db.collection("posts").doc(uid()).set({by:me, at:Date.now(), text, ...(d.img ? {img:d.img} : {}), likes:[]}));
+        if(ok){ closeModal(); toast("Gepostet · alle bekommen eine Push-Nachricht"); } }); break; }
+    case "post-like": {
+      const me = getMe(); const p = S.posts.find(x => x.id===id); if(!me || !p) break;
+      const likes = Array.isArray(p.likes) ? p.likes : []; const next = likes.includes(me) ? likes.filter(x => x!==me) : [...likes, me];
+      p.likes = next; render();
+      guarded(async () => { await write(() => S.db.collection("posts").doc(id).update({likes: next})); }); break; }
+    case "post-del": {
+      const p = S.posts.find(x => x.id===id); const me = getMe(); if(!p || !(p.by===me || isAdmin())) break;
+      if(S.armed!=="post:"+id){ S.armed = "post:"+id; render(); break; }
+      S.armed = null; guarded(async () => { const ok = await write(() => S.db.collection("posts").doc(id).delete()); if(ok) toast("Post gelöscht"); }); break; }
     case "vote": {
       const me = getMe(); const ns = nextSession(); if(!me || !ns) break;
       const v = el.dataset.v; const cur = pollFor(ns.key).mine(me); const ref = S.db.collection("votes").doc(ns.key+"_"+me);
@@ -4130,6 +4213,7 @@ document.addEventListener("keydown", e => {
 document.addEventListener("change", e => {
   const t = e.target;
   if(t.dataset.pp){ ppLoad(t.files?.[0]); t.value = ""; return; }
+  if(t.dataset.postImg){ postImgLoad(t.files?.[0]); t.value = ""; return; }
   if(t.dataset.actChange==="me"){ setMe(t.value); render(); return; }
   const d = S.draft; if(!d) return;
   if(t.dataset.mf){ const [i,side,k] = t.dataset.mf.split(":"); d.matches[+i][side][+k] = t.value; }
@@ -4259,6 +4343,7 @@ function subscribe(){
     DB.collection("votes").onSnapshot(q => { S.votes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("surveys").onSnapshot(q => { S.surveys = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("svotes").onSnapshot(q => { S.svotes = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
+    DB.collection("posts").onSnapshot(q => { S.posts = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("pinpays").onSnapshot(q => { S.pinpays = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("comments").onSnapshot(q => { S.comments = q.docs.map(x => ({...x.data(), id:x.id})); render(); }, () => {}),
     DB.collection("avatars").onSnapshot(q => { S.avatars = Object.fromEntries(q.docs.map(x => [x.id, x.data()])); render(); }, () => {}),
