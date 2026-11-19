@@ -1034,7 +1034,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-17.4";
+const APP_VERSION = "2026-11-19.1";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1548,7 +1548,7 @@ function resRole(m){
 function resActions(md, m){
   const role = resRole(m); const r = m.res;
   const btn = (act, label, cls="") => `<button class="btn sm ${cls}" data-act="${act}" data-md="${esc(md.id)}" data-mid="${esc(m.id)}">${label}</button>`;
-  if(m.status==="confirmed") return `<div class="resline"><span class="small muted">🔒 ${m.legacy ? "Ergebnis eingetragen" : `bestätigt von ${esc(pname(r?.confirmedBy))}`}</span></div>`;
+  if(m.status==="confirmed") return `<div class="resline"><span class="small muted">🔒 ${r?.fixedBy ? `korrigiert von ${esc(pname(r.fixedBy))}` : m.legacy ? "Ergebnis eingetragen" : `bestätigt von ${esc(pname(r?.confirmedBy))}`}</span>${isAdmin() && canWrite() ? `<div class="row">${btn("res-fix","Korrigieren","ghost")}</div>` : ""}</div>`;
   if(m.status==="proposed") return `<div class="resline"><span class="small" style="color:var(--warn,#B7791F)">⏳ eingetragen von ${esc(pname(r.by))}, wartet auf Bestätigung durch das andere Team</span>
     ${role==="confirm" || isAdmin() ? `<div class="row">${btn("res-ok","Bestätigen ✓","primary")}${btn("res-no", role==="waiting" ? "Zurückziehen" : "Ablehnen","danger")}</div>` : role==="waiting" ? `<div class="row">${btn("res-no","Zurückziehen","ghost")}</div>` : ""}</div>`;
   if(role==="enter" && md.date && md.date <= today()) return `<div class="resline">${btn("res-enter","Ergebnis eintragen","primary")}</div>`;
@@ -1575,15 +1575,16 @@ function modalRes(){
   const d = S.draft; const md = S.matchdays.find(x=>x.id===d.md); const m = md?.matches.find(x=>x.id===d.mid);
   if(!m) return {title:"Ergebnis", html:`<div class="empty">Runde nicht gefunden.</div>`, foot:""};
   const i = md.matches.indexOf(m);
-  return { title:"Ergebnis eintragen", html:`
+  const fix = !!d.fix;
+  return { title: fix ? "Ergebnis korrigieren" : "Ergebnis eintragen", html:`
     <div class="small muted">Spieltag ${mdNumbers()[md.id]} · ${esc(fmtDate(md.date))} · ${roundLabel(m,i)}</div>
     <div class="teams" style="align-items:end">
       <div class="field" style="text-align:center"><span class="pname">${(m.a||[]).map(nameHtml).join(" & ")}</span><input class="input" inputmode="numeric" maxlength="2" id="res-a" data-f="a" value="${esc(d.a)}" style="text-align:center;font-size:28px;font-weight:700;min-height:64px" aria-label="Spiele Team 1"></div>
       <div class="vs" style="padding-bottom:20px">:</div>
       <div class="field" style="text-align:center"><span class="pname">${(m.b||[]).map(nameHtml).join(" & ")}</span><input class="input" inputmode="numeric" maxlength="2" id="res-b" data-f="b" value="${esc(d.b)}" style="text-align:center;font-size:28px;font-weight:700;min-height:64px" aria-label="Spiele Team 2"></div>
     </div>
-    <div class="notice small">Ein Spieler aus dem anderen Team muss das Ergebnis bestätigen. Danach ist es gesperrt und kann nicht mehr geändert werden.</div>`,
-    foot:`<span></span><button class="btn primary" data-act="res-save" id="btnResSave">Eintragen</button>` };
+    <div class="notice small">${fix ? `Bisher: ${esc(d.old||"–")}. Die Korrektur gilt sofort für Tabelle und Elo und wird als „korrigiert von ${esc(pname(getMe()))}“ angezeigt.` : "Ein Spieler aus dem anderen Team muss das Ergebnis bestätigen. Danach ist es gesperrt und kann nicht mehr geändert werden."}</div>`,
+    foot:`<span></span><button class="btn primary" data-act="res-save" id="btnResSave">${fix ? "Korrektur speichern" : "Eintragen"}</button>` };
 }
 
 /* Erinnerung: Spieltag ist vorbei, aber Ergebnisse fehlen */
@@ -3015,7 +3016,7 @@ function matchLine(m, i, md){
     : `<div class="c1-s">${sets.length===1 ? `${sets[0].a}:${sets[0].b}` : `${r.sa}:${r.sb}`}${sets.length>1 ? `<small>${sets.map(s=>`${s.a}:${s.b}`).join(" ")}</small>` : done ? `<small>${lock}</small>` : ""}</div>`;
   return `<div class="pmw"><div class="c1 ${m.extra?"extra":""}"><span class="c1-l" title="${roundLabel(m,i)}">${m.extra?"EX":"R"+(i+1)}</span>
     <div class="c1-t ${r.played&&r.w==="a"?"win":r.played&&r.w==="b"?"lose":""}">${(m.a||[]).map(pl).join("")}</div>${score}<div class="c1-t ${r.played&&r.w==="b"?"win":r.played&&r.w==="a"?"lose":""}">${(m.b||[]).map(pl).join("")}</div></div>
-    ${md && !done ? resActions(md, m) : ""}</div>`;
+    ${md && (!done || (isAdmin() && canWrite())) ? resActions(md, m) : ""}</div>`;
 }
 function dayLine(md){
   const dr = dayRanking(md); if(!dr.winners.length) return "";
@@ -3981,10 +3982,20 @@ document.addEventListener("click", e => {
       guarded(async () => { const ok = await write(() => S.db.collection("broadcasts").doc(uid()).set({title:(d.title||"").trim(), body, to, by:getMe(), at: sendAt || Date.now(), status:"queued", ...(sendAt ? {sendAt} : {})}));
         if(ok){ closeModal(); toast(sendAt ? "Geplant für " + new Date(sendAt).toLocaleString("de-DE",{weekday:"short",day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"}) + " Uhr" : "Wird gesendet · kommt in 2–3 Minuten an"); } }); break; }
     case "res-enter": openModal("res", {md: el.dataset.md, mid: el.dataset.mid, a:"", b:""}); break;
+    case "res-fix": { const md = S.matchdays.find(x=>x.id===el.dataset.md); const m = md?.matches.find(x=>x.id===el.dataset.mid); if(!m || !isAdmin()) break;
+      const st = (m.sets||[])[0]||{}; openModal("res", {md: md.id, mid: m.id, a: String(st.a??""), b: String(st.b??""), fix:true, old:(m.sets||[]).map(x=>`${x.a}:${x.b}`).join(", ")}); break; }
     case "res-save": {
       const a = parseInt(d.a,10), b = parseInt(d.b,10);
       if(!(a>=0 && a<=9 && b>=0 && b<=9)){ toast("Bitte für beide Teams die gewonnenen Spiele eintragen (0–9)."); break; }
       const md = S.matchdays.find(x=>x.id===d.md); const m = md?.matches.find(x=>x.id===d.mid); if(!m) break;
+      if(d.fix){
+        if(!isAdmin() || m.status!=="confirmed") break;
+        const r = m.res || {}; const prev = (m.sets||[]).map(x=>({a:x.a??null, b:x.b??null}));
+        const k = resKey(d.md, d.mid);
+        const data = {md:d.md, match:d.mid, sets:[{a,b}], status:"confirmed", by:r.by||getMe(), side:r.side||"x", at:r.at||Date.now(),
+          confirmedBy:r.confirmedBy||getMe(), confirmedAt:r.confirmedAt||Date.now(), fixedBy:getMe(), fixedAt:Date.now(), prev};
+        guarded(async () => { const ok = await write(() => S.db.doc("results/"+k).set(data)); if(ok){ closeModal(); toast("Ergebnis korrigiert 🔒"); } }); break;
+      }
       if(m.status){ toast("Für diese Runde ist schon ein Ergebnis eingetragen."); break; }
       const me = getMe(); const side = (m.a||[]).includes(me) ? "a" : (m.b||[]).includes(me) ? "b" : "x";
       guarded(async () => { const ok = await write(() => S.db.doc("results/"+resKey(d.md, d.mid)).set({md:d.md, match:d.mid, sets:[{a,b}], status:"proposed", by:me, side, at:Date.now()}));
