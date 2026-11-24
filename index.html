@@ -1034,7 +1034,7 @@ const firebaseConfig = {
   messagingSenderId: "465446473705",
   appId: "1:465446473705:web:d0ca6588a9fda78e968578"
 };
-const APP_VERSION = "2026-11-19.1";
+const APP_VERSION = "2026-11-24.1";
 const fbApp = initializeApp(firebaseConfig);
 const fs = getFirestore(fbApp);
 const auth = getAuth(fbApp);
@@ -1809,7 +1809,6 @@ function doorTop(){
   if(!S.config || !canDoorCode()) return "";
   const ns = nextSession(); if(!ns) return "";
   const md = mdForDate(ns.key); const n = md ? (md.participants||[]).length : pollFor(ns.key).play.length;
-  if(n < 4) return "";
   const dc = S.doorcodes[ns.key]; if(dc?.code && S.doorEdit!==ns.key) return "";
   return `<section class="card door-top"><div class="small muted" style="margin-bottom:6px">${esc(fmtSession(ns))} · ${sched().start} Uhr</div>${doorCode(ns.key, true)}</section>`;
 }
@@ -2098,7 +2097,7 @@ function todoCard(){
   if(S.config && canDoorCode()){
     const ns = nextSession();
     if(ns){ const md = mdForDate(ns.key); const n = md ? (md.participants||[]).length : pollFor(ns.key).play.length; const dc = S.doorcodes[ns.key];
-      if(n >= 4 && (!dc?.code || S.doorEdit===ns.key)){
+      if(!dc?.code || S.doorEdit===ns.key){
         const open = S.doorEdit===ns.key;
         rows.push(`<div class="h-tr"><span class="h-ic">${IC.key}</span><div class="h-tx"><b>Türcode eintragen</b><span>für ${esc(fmtSession(ns))}, ${sched().start} Uhr</span>
           ${open ? `<div class="door-f"><input class="input" id="door-in" maxlength="20" autocomplete="off" value="${esc(dc?.code||"")}" placeholder="Code"><button class="btn sm primary" data-act="door-save" data-key="${esc(ns.key)}">Speichern</button></div>` : ""}</div>
